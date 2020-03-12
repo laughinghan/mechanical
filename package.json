@@ -1,0 +1,26 @@
+{
+  "name": "mechanical",
+  "version": "0.0.1",
+  "description": "Build webapps as easily as finite-state machines. A language with imperative-like syntax but referential transparency, no type annotations but complete static type and effect inference.",
+  "main": "mechc.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node mechc.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laughinghan/mechanical.git"
+  },
+  "author": "Han Seoul-Oh <laughinghan@gmail.com> (https://github.com/laughinghan)",
+  "license": "(BlueOak-1.0.0 OR MIT)",
+  "bugs": {
+    "url": "https://github.com/laughinghan/mechanical/issues"
+  },
+  "homepage": "https://github.com/laughinghan/mechanical#readme",
+  "dependencies": {
+    "@types/node": "^13.9.0",
+    "@types/parsimmon": "^1.10.1",
+    "parsimmon": "^1.13.0",
+    "typescript": "^3.8.3"
+  }
+}
