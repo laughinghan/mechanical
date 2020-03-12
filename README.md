@@ -1,19 +1,25 @@
-# Mechanical: a state machine-oriented programming language
+# Mechanical
 
-- Programming in Mechanical is just defining parameterized state machines
-  (aka [The Elm Architecture]), so understanding the state of the program and
-  how it can change is **as easy as finite-state machines**.
-- Unlike Elm, event handlers can update state and perform side-effects in an
-  **imperative-like syntax**.
-- There are **no type or effect annotations,** but Mechanical is **statically typed**
-  and the imperative-like syntax is **referentially transparent**, thanks to a
-  fully inferred algebraic type and effect system.
+A language that makes building webapps (and more!) as easy as building
+finite-state machines.
 
-Mechanical compiles to an extremely readable, understandable, wicked-fast JavaScript
-modules that are fully interoperable with the rest of the JavaScript ecosystem.
+- **Best of both worlds between declarative and imperative:**
+  Just say what you want to happen instead of how, by declaratively defining
+  your program as a state machine (like [The Elm Architecture]).
+  Unlike Elm, straightforwardly perform side-effects using imperative-like yet
+  referentially transparent syntax.
+- **X% faster and Y% smaller than React:**
+  Instead of virtual DOM diffing, just compile to imperative, mutative
+  JavaScript.
+- **Static types, no type annotations:**
+  The benefits of static typing like autocomplete and compile-time error
+  checking, never write a single type annotation.
+- **Fully interoperable:**
+  Compile to JavaScript modules that can call or be called by any JS library
+  or browser/Node API.
 
-**Note:** alpha-quality software, incomplete, probably buggy. Don't rely on it
-to actually work. **Help wanted!**
+**Note:** very incomplete and buggy, don't rely on it actually working.
+**Help wanted!**
 
 [The Elm Architecture]: https://guide.elm-lang.org/architecture/
 
@@ -70,7 +76,7 @@ npx mechc some_file.mech
 
 Which will output: `some_file.js`
 
-## License: BlueOak-1.0.0 or MIT
+## License: Blue Oak or MIT
 
 You may use Mechanical under either of our permissive licenses, the highly
 readable [Blue Oak Model License](LICENSE-BlueOak.md), or the more standard

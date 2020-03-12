@@ -1,7 +1,7 @@
 {
   "name": "mechanical",
   "version": "0.0.1",
-  "description": "Build webapps as easily as finite-state machines. A language with imperative-like syntax but referential transparency, no type annotations but complete static type and effect inference.",
+  "description": "A language that makes building webapps as easy as finite-state machines",
   "main": "mechc.js",
   "scripts": {
     "build": "tsc",
