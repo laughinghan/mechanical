@@ -35,30 +35,27 @@ export const parser = createLanguage({
   Identifier: () => r(/[a-z]\w*/i), // TODO non-English letters etc
   Numeral: () => r(/\d+/), // TODO decimals, exponential notation
 
-  PrimaryExpr: L => alt( // in terms of operator precedence,
-      // "primary expressions" are the smallest units, which are either actual
-      // leaf nodes (variables, numberals, string literals) or delimited groups
-      // (parenthesized exprs, array literals, object literals, function calls,
-      // anonymous functions). They are the operands to the tightest-binding
-      // operator
+  PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
+      // are the smallest units, which are either actual leaf nodes (variables,
+      // numberals, string literals) or delimited groups (parenthesized exprs,
+      // array literals, object literals, function calls, anonymous functions).
+      // They are the operands to the tightest-binding operator
     L.Identifier,
     L.Numeral,
   ),
-
-  UnaryExpr: ({_, PrimaryExpr }) => alt( // unary operators (tightest-binding operators)
+  UnaryExpr: ({_, PrimaryExpr }) => alt( // (tightest-binding operator)
     PrimaryExpr,
     seqMap(r(/[-!]/), _, PrimaryExpr,
       (op, _, arg) => ({ type: 'UnaryExpr', op, arg })),
   ),
-
   ExponentExpr: ({ PrimaryExpr, _, UnaryExpr }) => alt(
-    seqMap(PrimaryExpr, _, s('**'), _, UnaryExpr,
-      (left, _, __, ___, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
+    seqMap(PrimaryExpr, s('**').trim(_), UnaryExpr,
+      (left, _, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
         // Note 1: as a special exception to typical operator precedence,
         // exponents binds equally tightly leftwards as UnaryExpr, to avoid the
         // ambiguity of whether -2**2 is (-2)**2 = 4 or -(2**2) = -4
         //   https://tc39.es/ecma262/#sec-exp-operator
-        // Chrome throws:
+        // In Chrome, -2**2 throws:
         //   Uncaught SyntaxError: Unary operator used immediately before
         //   exponentiation expression. Parenthesis must be used to disambiguate
         //   operator precedence
@@ -79,6 +76,32 @@ export const parser = createLanguage({
     MultExpr, r(/[+-]/).trim(_),
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   ),
+  InequalityExpr: ({ AddExpr, _ }) => seqMap( // mutually exclusive precedence with
+      // other comparisons and may not be chained, because (1 != 2 != 1) == #yes
+      // would be weird, but anything else would require quadratic comparisons
+    AddExpr, s('!=').trim(_), AddExpr,
+    (left, _, right) => ({ type: 'InequalityExpr', left, right })
+  ),
+  CompareChainExpr: ({ AddExpr, _ }) => seqMap(
+    AddExpr,
+    alt(
+      seq(r(/==|<=?|/).trim(_), AddExpr).many(),
+      seq(r(/==|>=?/).trim(_), AddExpr).many(),
+    ),
+    (first, rest) => rest.length
+      ? ({
+          type: 'CompareChainExpr',
+          chain: rest.map(([op, arg], i) => ({
+            type: 'BinaryExpr',
+            op,
+            left: i ? rest[i-1][1] : first,
+            right: arg,
+          })),
+        })
+      : first
+  ),
+  CompareExpr: ({ InequalityExpr, CompareChainExpr }) =>
+    alt(InequalityExpr, CompareChainExpr),
 
   //
   // Top-Level Declarations

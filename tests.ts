@@ -63,9 +63,7 @@ suite('Parser', () => {
     })
     test('prohibit ambiguous -2**2', () => {
       // see comment in ExponentExpr source code for more about this ambiguity
-      assert.throws(() => {
-        parser.ExponentExpr.tryParse('-2**2')
-      })
+      assert(!parser.ExponentExpr.parse('-2**2').status)
     })
   })
 
@@ -136,6 +134,58 @@ suite('Parser', () => {
     test('fallthru to PrimaryExpr', () => {
       const observed = parser.AddExpr.tryParse('2')
       const expected = '2'
+      assert.deepStrictEqual(observed, expected)
+    })
+  })
+
+  suite('CompareExpr', () => {
+    test('basic a != b', () => {
+      const observed = parser.CompareExpr.tryParse('a != b')
+      const expected = {
+        type: 'InequalityExpr',
+        left: 'a',
+        right: 'b',
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('no chaining a != b != c', () => {
+      assert(!parser.CompareExpr.parse('a != b != c').status)
+    })
+    test('"!=" is mutually exclusive with other comparisons', () => {
+      assert(!parser.CompareExpr.parse('a != b < c').status)
+      assert(!parser.CompareExpr.parse('a < b != c').status)
+    })
+    test('chaining', () => {
+      const observed = parser.CompareExpr.tryParse('a < b == c <= d < e')
+      const expected = {
+        type: 'CompareChainExpr',
+        chain: [
+          {
+            type: 'BinaryExpr',
+            op: '<',
+            left: 'a',
+            right: 'b',
+          },
+          {
+            type: 'BinaryExpr',
+            op: '==',
+            left: 'b',
+            right: 'c',
+          },
+          {
+            type: 'BinaryExpr',
+            op: '<=',
+            left: 'c',
+            right: 'd',
+          },
+          {
+            type: 'BinaryExpr',
+            op: '<',
+            left: 'd',
+            right: 'e',
+          },
+        ],
+      }
       assert.deepStrictEqual(observed, expected)
     })
   })
