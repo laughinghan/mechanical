@@ -4,7 +4,7 @@
   "description": "A language that makes building webapps as easy as finite-state machines",
   "main": "mechc.js",
   "scripts": {
-    "test": "ts-node mechc.ts"
+    "test": "mocha -u tdd -r ts-node/register tests.ts"
   },
   "repository": {
     "type": "git",
@@ -17,8 +17,10 @@
   },
   "homepage": "https://github.com/laughinghan/mechanical#readme",
   "dependencies": {
+    "@types/mocha": "^7.0.2",
     "@types/node": "^13.9.0",
     "@types/parsimmon": "^1.10.1",
+    "mocha": "^7.1.0",
     "parsimmon": "^1.13.0",
     "ts-node": "^8.6.2",
     "typescript": "^3.8.3"
