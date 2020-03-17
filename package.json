@@ -4,8 +4,7 @@
   "description": "A language that makes building webapps as easy as finite-state machines",
   "main": "mechc.js",
   "scripts": {
-    "build": "tsc",
-    "test": "npm run build && node mechc.js"
+    "test": "ts-node mechc.ts"
   },
   "repository": {
     "type": "git",
@@ -21,6 +20,7 @@
     "@types/node": "^13.9.0",
     "@types/parsimmon": "^1.10.1",
     "parsimmon": "^1.13.0",
+    "ts-node": "^8.6.2",
     "typescript": "^3.8.3"
   }
 }

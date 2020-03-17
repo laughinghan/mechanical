@@ -1,5 +1,4 @@
 {
-  "files": ["mechc.ts"],
   "compilerOptions": {
     /* For Node v12.9.0+, based on: https://stackoverflow.com/a/59787575 */
     "target": "ES2019",                       /* Specify ECMAScript target version: 'ES3' (default), 'ES5', 'ES2015', 'ES2016', 'ES2017', 'ES2018', 'ES2019', 'ES2020', or 'ESNEXT'. */
