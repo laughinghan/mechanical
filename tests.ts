@@ -20,7 +20,7 @@ suite('Parser', () => {
       }
       assert.deepStrictEqual(observed, expected)
     })
-    test('fallback to PrimaryExpr', () => {
+    test('fallthru to PrimaryExpr', () => {
       const observed = parser.UnaryExpr.tryParse('2')
       const expected = '2'
       assert.deepStrictEqual(observed, expected)
@@ -86,7 +86,7 @@ suite('Parser', () => {
       assert.deepStrictEqual(observed, expected)
     })
     test('the MDAS (in PEMDAS)', () => {
-      const observed = parser.AddExpr.tryParse('2-3*4+5**6/7**8')
+      const observed = parser.AddExpr.tryParse('2-3*4+5**-6/7**8')
       const expected = {
         type: 'BinaryExpr',
         op: '+',
@@ -108,7 +108,11 @@ suite('Parser', () => {
             type: 'BinaryExpr',
             op: '**',
             left: '5',
-            right: '6',
+            right: {
+              type: 'UnaryExpr',
+              op: '-',
+              arg: '6',
+            },
           },
           right: {
             type: 'BinaryExpr',
@@ -118,6 +122,20 @@ suite('Parser', () => {
           },
         },
       }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('fallthru to UnaryExpr', () => {
+      const observed = parser.AddExpr.tryParse('-2')
+      const expected = {
+        type: 'UnaryExpr',
+        op: '-',
+        arg: '2',
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('fallthru to PrimaryExpr', () => {
+      const observed = parser.AddExpr.tryParse('2')
+      const expected = '2'
       assert.deepStrictEqual(observed, expected)
     })
   })
