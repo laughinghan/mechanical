@@ -188,5 +188,71 @@ suite('Parser', () => {
       }
       assert.deepStrictEqual(observed, expected)
     })
+    test('improper chaining a < b > c', () => {
+      assert(!parser.CompareExpr.parse('a < b > c').status)
+    })
+    test('chaining starting with equals a == b < c', () => {
+      parser.OrExpr.tryParse('a == b < c')
+      parser.OrExpr.tryParse('a == b > c')
+    })
+    test('fallthru to PrimaryExpr', () => {
+      const observed = parser.CompareExpr.tryParse('2')
+      const expected = '2'
+      assert.deepStrictEqual(observed, expected)
+    })
+  })
+
+  suite('logical boolean operators && and ||', () => {
+    test('&& conventionally has higher precedence than ||', () => {
+      const observed = parser.OrExpr.tryParse('a && b || c && d')
+      const expected = {
+        type: 'BinaryExpr',
+        op: '||',
+        left: {
+          type: 'BinaryExpr',
+          op: '&&',
+          left: 'a',
+          right: 'b',
+        },
+        right: {
+          type: 'BinaryExpr',
+          op: '&&',
+          left: 'c',
+          right: 'd',
+        },
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('logical and arithmetic precedence', () => {
+      const observed = parser.OrExpr.tryParse('a && b == c > d && e')
+      const expected = {
+        type: 'BinaryExpr',
+        op: '&&',
+        left: {
+          type: 'BinaryExpr',
+          op: '&&',
+          left: 'a',
+          right: {
+            type: 'CompareChainExpr',
+            chain: [
+              {
+                type: 'BinaryExpr',
+                op: '==',
+                left: 'b',
+                right: 'c',
+              },
+              {
+                type: 'BinaryExpr',
+                op: '>',
+                left: 'c',
+                right: 'd',
+              },
+            ],
+          },
+        },
+        right: 'e',
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
   })
 })

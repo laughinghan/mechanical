@@ -1,5 +1,6 @@
 import {
   Parser,
+  succeed,
   createLanguage,
   alt,
   seq,
@@ -84,9 +85,18 @@ export const parser = createLanguage({
   ),
   CompareChainExpr: ({ AddExpr, _ }) => seqMap(
     AddExpr,
-    alt(
-      seq(r(/==|<=?|/).trim(_), AddExpr).many(),
-      seq(r(/==|>=?/).trim(_), AddExpr).many(),
+    seqMap(
+      seq(s('==').trim(_), AddExpr).many(), // we need to special-case the
+        // leading =='s because alt() requires failure to fall-through to the
+        // next alternative, and when parsing "a == b > c" the first alternative
+        // won't fail, rather it succeeds parsing '== b', but the overall parser
+        // then fails on '>'
+      alt(
+        seq(r(/<=?|==/).trim(_), AddExpr).atLeast(1),
+        seq(r(/>=?|==/).trim(_), AddExpr).atLeast(1),
+        succeed([]),
+      ),
+      (undirected, directed) => undirected.concat(directed)
     ),
     (first, rest) => rest.length
       ? ({
@@ -102,6 +112,16 @@ export const parser = createLanguage({
   ),
   CompareExpr: ({ InequalityExpr, CompareChainExpr }) =>
     alt(InequalityExpr, CompareChainExpr),
+  AndExpr: ({ CompareExpr, _ }) => leftRecur( // conventionally higher precedence
+                                              // than OrExpr
+    CompareExpr, s('&&').trim(_),
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+  ),
+  OrExpr: ({ AndExpr, _ }) => leftRecur( // conventionally lower precedence
+                                         // than AndExpr
+    AndExpr, s('||').trim(_),
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+  ),
 
   //
   // Top-Level Declarations
