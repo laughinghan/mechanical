@@ -122,6 +122,12 @@ export const parser = createLanguage({
     AndExpr, s('||').trim(_),
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   ),
+  CondExpr: ({ CondExpr, OrExpr, _ }) => alt(
+    seqMap(OrExpr, s('?').trim(_), CondExpr, s(':').trim(_), CondExpr,
+      (test, _, ifYes, __, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
+    OrExpr,
+  ),
+
 
   //
   // Top-Level Declarations

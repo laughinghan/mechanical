@@ -293,4 +293,100 @@ suite('Parser', () => {
       assert.deepStrictEqual(observed, expected)
     })
   })
+
+  suite('CondExpr', () => {
+    test('basic a ? b : c', () => {
+      const observed = parser.CondExpr.tryParse('a ? b : c')
+      const expected = {
+        type: 'CondExpr',
+        test: 'a',
+        ifYes: 'b',
+        ifNo: 'c',
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('precedence with comparisons', () => {
+      const observed = parser.CondExpr.tryParse('a == b && c < d < e ? f + 2 : g**3*4')
+      const expected = {
+        type: 'CondExpr',
+        test: {
+          type: 'BinaryExpr',
+          op: '&&',
+          left: {
+            type: 'CompareChainExpr',
+            chain: [{
+              type: 'BinaryExpr',
+              op: '==',
+              left: 'a',
+              right: 'b',
+            }],
+          },
+          right: {
+            type: 'CompareChainExpr',
+            chain: [
+              {
+                type: 'BinaryExpr',
+                op: '<',
+                left: 'c',
+                right: 'd',
+              },
+              {
+                type: 'BinaryExpr',
+                op: '<',
+                left: 'd',
+                right: 'e',
+              },
+            ],
+          },
+        },
+        ifYes: {
+          type: 'BinaryExpr',
+          op: '+',
+          left: 'f',
+          right: '2',
+        },
+        ifNo: {
+          type: 'BinaryExpr',
+          op: '*',
+          left: {
+            type: 'BinaryExpr',
+            op: '**',
+            left: 'g',
+            right: '3',
+          },
+          right: '4',
+        },
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('nested conditionals', () => {
+      const observed = parser.CondExpr.tryParse('a ? b ? c : d ? e : f : g ? h : i')
+      const expected = {
+        type: 'CondExpr',
+        test: 'a',
+        ifYes: {
+          type: 'CondExpr',
+          test: 'b',
+          ifYes: 'c',
+          ifNo: {
+            type: 'CondExpr',
+            test: 'd',
+            ifYes: 'e',
+            ifNo: 'f',
+          },
+        },
+        ifNo: {
+          type: 'CondExpr',
+          test: 'g',
+          ifYes: 'h',
+          ifNo: 'i',
+        },
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('mis-nested conditionals', () => {
+      assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f ? g : h').status)
+      assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f : g ? h : i : j').status)
+    })
+  })
 })
