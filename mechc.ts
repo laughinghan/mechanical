@@ -22,12 +22,12 @@ function leftRecur<Expr, Op>(
 
 export const parser = createLanguage({
   // Whitespace
-  _: () => r(/[ \t]*/),  // optional, non-newline whitespace
-  __: () => r(/[ \t]+/), // required, non-newline whitespace
-  _n: () => r(/[ \t\n]+/), // newline or whitespace---no other whitespace allowed,
-                                 // \a\b\v\f\r are all banned.
-                                 // Banned whitespace should be treated kinda like control
-                                 // characters and non-printing characters
+  _: () => r(/[ \n]*/),  // optional whitespace
+  __: () => r(/[ \n]+/), // required whitespace
+  // Note that Tabs are banned, as are exotic whitespace \a\b\v\f\r. Banned
+  // whitespace should be treated like control characters and non-printing
+  // characters
+
 
   //
   // Expression Grammar (based on JS)
@@ -141,6 +141,7 @@ export const parser = createLanguage({
       s('='),
       _,
     )
+
 
   // top-level statements in an event handler declaration
 })

@@ -388,5 +388,53 @@ suite('Parser', () => {
       assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f ? g : h').status)
       assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f : g ? h : i : j').status)
     })
+    test('if-elif-elif-else, postfix', () => {
+      const observed = parser.CondExpr.tryParse(
+        `a ? b :
+          c ? d :
+          e ? f :
+          g`)
+      const expected = {
+        type: 'CondExpr',
+        test: 'a',
+        ifYes: 'b',
+        ifNo: {
+          type: 'CondExpr',
+          test: 'c',
+          ifYes: 'd',
+          ifNo: {
+            type: 'CondExpr',
+            test: 'e',
+            ifYes: 'f',
+            ifNo: 'g',
+          },
+        },
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('if-elif-elif-else, prefix', () => {
+      const observed = parser.CondExpr.tryParse(
+        `a ? b
+        : c ? d
+        : e ? f
+        : g`)
+      const expected = {
+        type: 'CondExpr',
+        test: 'a',
+        ifYes: 'b',
+        ifNo: {
+          type: 'CondExpr',
+          test: 'c',
+          ifYes: 'd',
+          ifNo: {
+            type: 'CondExpr',
+            test: 'e',
+            ifYes: 'f',
+            ifNo: 'g',
+          },
+        },
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
   })
 })
