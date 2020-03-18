@@ -192,8 +192,46 @@ suite('Parser', () => {
       assert(!parser.CompareExpr.parse('a < b > c').status)
     })
     test('chaining starting with equals a == b < c', () => {
-      parser.OrExpr.tryParse('a == b < c')
-      parser.OrExpr.tryParse('a == b > c')
+      const observed = parser.OrExpr.tryParse('a == b < c')
+      const expected = {
+        type: 'CompareChainExpr',
+        chain: [
+          {
+            type: 'BinaryExpr',
+            op: '==',
+            left: 'a',
+            right: 'b',
+          },
+          {
+            type: 'BinaryExpr',
+            op: '<',
+            left: 'b',
+            right: 'c',
+          },
+        ],
+      }
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('chaining starting with equals a == b > c', () => {
+      const observed = parser.OrExpr.tryParse('a == b > c')
+      const expected = {
+        type: 'CompareChainExpr',
+        chain: [
+          {
+            type: 'BinaryExpr',
+            op: '==',
+            left: 'a',
+            right: 'b',
+          },
+          {
+            type: 'BinaryExpr',
+            op: '>',
+            left: 'b',
+            right: 'c',
+          },
+        ],
+      }
+      assert.deepStrictEqual(observed, expected)
     })
     test('fallthru to PrimaryExpr', () => {
       const observed = parser.CompareExpr.tryParse('2')
