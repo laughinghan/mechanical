@@ -76,6 +76,89 @@ npx mechc some_file.mech
 
 Which will output: `some_file.js`
 
+## Differences from JS
+
+#### Extensions
+
+Mechanical-specific extensions to JS expression syntax (which only make sense
+with Mechanical semantics, and wouldn't make sense for JS:
+- `Cmd { ... }`
+- Hashtagged values `#tag value` and pattern-matching `match tagged {...}`
+
+        Let x = Current switch_state ? #on 72 : #off "sleeping for the night"
+        // expression-form pattern-matching:
+        Let y = match x { #on temp -> temp; #off message -> 68 }
+        // statement-form pattern-matching:
+        Match x:
+            #on temp ->
+                Change color to #green
+                Change temperature_dial to temp
+            #off message ->
+                Change display_message to message.slice(0, 100)
+
+Extensions to JavaScript features:
+- Multiline strings
+    + Both string literals (`""` and `''`) can have newlines in them, but
+      subsequent lines must be indented to at least the same level as the
+      open-quote:
+
+        When button.Click:
+            Let valid_string = "first line
+            second line
+              third line" // == "first line\nsecondline\n  third line"
+
+        When button2.Click:
+            Let invalid_string = "first line
+          second line" // error!
+
+- Alternate string interpolation syntax <code>$`text {expression} text`</code>
+    + In addition to JS [template literal syntax] (e.g.
+      <code>`text ${expression} text`</code>), Mechanical supports an alternative
+      string interpolation syntax where you prefix the string with `$`:
+
+          $`text {expression} text`
+          $'text {expression} text'
+          $"text {expression} text"
+          // are all equivalent to:
+          `text ${expression} text`
+
+      This is similar to C# but without format specifiers.
+
+[template literal syntax]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
+
+#### Incompatibilities
+
+The expression syntax is based on JavaScript's, with a few deliberate
+incompatibilities in edge cases that I think JavaScript syntax is confusing:
+- Identifiers may only have single, interstitial underscores
+    + Valid: `this_is_totally_valid`
+    + Invalid: `_foo`, `foo__bar`, `foo_`, `$foo`
+- Exponentiation isn't chainable
+    + Should `2**3**2` be `(2**3)**2 = 64`, or `2**(3**2) = 512`? JS and Python
+      both say `512`, but I think that's confusing because it's the other way
+      around for other non-associative operators, e.g. `2/3/4 = (2/3)/4`.
+      In Mechanical, `2**3**2` is a syntax error
+    + (Just like JS, `-2**2` is also a syntax error. This actually differs from
+       Python, where `-2**2 = -(2**2) = -4`, but that's confusing because it
+       look like it could be `(-2)**2 = 4`)
+- Comparisons are chainable
+    + In JS, `3 > 2 > 1` is false, which is confusing. In Mechanical, not only
+      does `a > b > c` behave as expected, but so does `a > b >= c == d`, or
+      `a == b < c == d < e == f`. This feature is inspired by Python, however
+      unlike Python, constructions like `a < b > c` are prohibited (they have
+      to point the same way), and `!=` can't be chained at all.
+    + (`!=` can't be chained because should `1 != 2 != 1` be true or false?)
+- No bitwise operators
+    + We have none of `~`, `&`, `|`, `<<`, `>>`, `>>>` built-in, but I hope to
+      introduce a built-in macro
+- JS-specific things that don't make sense with Mechanical semantics:
+    + No "strict in/equality" `===`/`!==`. Regular in/equality `==`/`!=` is
+      already strict
+    + No increment/decrement operators `++`/`--`
+    + No `in` or `instanceof` relations
+    + No assignment operators `=`, `+=`, `-=`, `*=`, `/=`, etc
+    + No comma operator
+
 ## License: Blue Oak or MIT
 
 You may use Mechanical under either of our permissive licenses, the highly
