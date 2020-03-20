@@ -33,8 +33,9 @@ export const parser = createLanguage({
   // Expression Grammar (based on JS)
   //   https://tc39.es/ecma262/#sec-ecmascript-language-expressions
   //
-  Identifier: () => r(/[a-z]\w*/i), // TODO non-English letters etc
+  Identifier: () => r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i), // TODO non-English letters etc
   Numeral: () => r(/\d+/), // TODO decimals, exponential notation
+  StringLiteral: () => r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/),
 
   PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
       // are the smallest units, which are either actual leaf nodes (variables,
@@ -43,6 +44,7 @@ export const parser = createLanguage({
       // They are the operands to the tightest-binding operator
     L.Identifier,
     L.Numeral,
+    L.StringLiteral,
   ),
   UnaryExpr: ({_, PrimaryExpr }) => alt( // (tightest-binding operator)
     PrimaryExpr,
