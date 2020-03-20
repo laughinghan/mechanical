@@ -36,6 +36,11 @@ export const parser = createLanguage({
   Identifier: () => r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i), // TODO non-English letters etc
   Numeral: () => r(/\d+/), // TODO decimals, exponential notation
   StringLiteral: () => r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/),
+  ArrayLiteral: ({ _, Expression }) => s('[').then(_).then(
+    Expression.sepBy(s(',').trim(_))
+    .skip(seq(_, s(',')).or(succeed(''))) // optional trailing comma
+    .map(exprs => ({ type: 'ArrayLiteral', exprs }))
+  ).skip(_).skip(s(']')),
 
   PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
       // are the smallest units, which are either actual leaf nodes (variables,
@@ -45,6 +50,7 @@ export const parser = createLanguage({
     L.Identifier,
     L.Numeral,
     L.StringLiteral,
+    L.ArrayLiteral,
   ),
   UnaryExpr: ({_, PrimaryExpr }) => alt( // (tightest-binding operator)
     PrimaryExpr,
@@ -129,6 +135,7 @@ export const parser = createLanguage({
       (test, _, ifYes, __, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
     OrExpr,
   ),
+  Expression: ({ CondExpr }) => CondExpr,
 
 
   //

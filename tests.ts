@@ -72,6 +72,58 @@ suite('Parser', () => {
         assert(!parser.PrimaryExpr.parse("'text \\'something' else'").status)
       })
     })
+    suite('array literals', () => {
+      test('basic [1,2,3]', () => {
+        const observed = parser.PrimaryExpr.tryParse('[ 1, 2, 3 ]')
+        const expected = {
+          type: 'ArrayLiteral',
+          exprs: [ '1', '2', '3' ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic empty []', () => {
+        const observed = parser.PrimaryExpr.tryParse('[]')
+        const expected = {
+          type: 'ArrayLiteral',
+          exprs: [],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('trailing comma [1,2,]', () => {
+        const observed = parser.PrimaryExpr.tryParse('[ 1, 2, ]')
+        const expected = {
+          type: 'ArrayLiteral',
+          exprs: [ '1', '2' ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('newlines [1,2,]', () => {
+        const observed = parser.PrimaryExpr.tryParse(`[
+          1,
+          2,
+        ]`)
+        const expected = {
+          type: 'ArrayLiteral',
+          exprs: [ '1', '2' ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('invalid (holes) [1,,2]', () => {
+        assert(!parser.PrimaryExpr.parse('[ 1, , 2 ]').status)
+        assert(!parser.PrimaryExpr.parse('[ 1, 2,, ]').status)
+      })
+      test('invalid (missing comma) [1 2]', () => {
+        assert(!parser.PrimaryExpr.parse('[1 2]').status)
+        assert(!parser.PrimaryExpr.parse('[[1] 2]').status)
+        assert(!parser.PrimaryExpr.parse('[1 [2]]').status)
+      })
+      test('invalid mismatched brackets', () => {
+        assert(!parser.PrimaryExpr.parse('[1, 2').status)
+        assert(!parser.PrimaryExpr.parse('1, 2]').status)
+        assert(!parser.PrimaryExpr.parse('[[1, 2]').status)
+        assert(!parser.PrimaryExpr.parse('[[1], 2').status)
+      })
+    })
   })
 
   suite('expression operator precedence stack', () => {

@@ -148,6 +148,20 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
       unlike Python, constructions like `a < b > c` are prohibited (they have
       to point the same way), and `!=` can't be chained at all.
     + (`!=` can't be chained because should `1 != 2 != 1` be true or false?)
+- No [holes] in arrays (trailing commas are allowed in array literals though)
+
+        // valid:
+        [ 1, 2 ]
+        [ 1, 2, ]
+        [
+          1,
+          2,
+        ]
+
+        // invalid:
+        [ 1, , 2 ]
+        [ 1, 2,, ]
+
 - No bitwise operators
     + We have none of `~`, `&`, `|`, `<<`, `>>`, `>>>` built-in, but I hope to
       introduce a built-in macro
@@ -158,6 +172,8 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
     + No `in` or `instanceof` relations
     + No assignment operators `=`, `+=`, `-=`, `*=`, `/=`, etc
     + No comma operator
+
+[holes]: https://2ality.com/2015/09/holes-arrays-es6.html
 
 ## License: Blue Oak or MIT
 
