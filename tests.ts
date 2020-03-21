@@ -108,6 +108,18 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
+      test('comma-first', () => {
+        const observed = parser.PrimaryExpr.tryParse(
+          `[ 1
+           , 2
+           , 3
+           ]`)
+        const expected = {
+          type: 'ArrayLiteral',
+          exprs: [ '1', '2', '3' ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
       test('invalid (holes) [1,,2]', () => {
         assert(!parser.PrimaryExpr.parse('[ 1, , 2 ]').status)
         assert(!parser.PrimaryExpr.parse('[ 1, 2,, ]').status)
@@ -122,6 +134,169 @@ suite('Parser', () => {
         assert(!parser.PrimaryExpr.parse('1, 2]').status)
         assert(!parser.PrimaryExpr.parse('[[1, 2]').status)
         assert(!parser.PrimaryExpr.parse('[[1], 2').status)
+      })
+    })
+    suite('record literals', () => {
+      test('basic {a: 1, b:2}', () => {
+        const observed = parser.PrimaryExpr.tryParse('{a: 1, b: 2}')
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [
+            { key: 'a', val: '1' },
+            { key: 'b', val: '2' },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('trailing comma {a: 1, b:2,}', () => {
+        const observed = parser.PrimaryExpr.tryParse('{a: 1, b: 2,}')
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [
+            { key: 'a', val: '1' },
+            { key: 'b', val: '2' },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('empty record {}', () => {
+        const observed = parser.PrimaryExpr.tryParse('{}')
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('record field name punning {a}', () => {
+        const observed = parser.PrimaryExpr.tryParse('{a}')
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [{ key: 'a', val: 'a' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('mixed obj { a: 1, b, c, }', () => {
+        const observed = parser.PrimaryExpr.tryParse('{ a: 1, b, c, }')
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [
+            { key: 'a', val: '1' },
+            { key: 'b', val: 'b' },
+            { key: 'c', val: 'c' },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('invalid without comma {a b}', () => {
+        assert(!parser.PrimaryExpr.parse('{a b}').status)
+      })
+      test('allow expressions in values { a: 1+1, ... }', () => {
+        const observed = parser.PrimaryExpr.tryParse(`{
+          a: 1+1,
+          b: x && y ? z : t ? w : u ? v + 2**-2 : 3,
+          c: { i: 0, j: 1, k: 2 },
+          d: foo ? { n: 123 } : { n: 321 },
+        }`)
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [
+            {
+              key: 'a',
+              val: {
+                type: 'BinaryExpr',
+                op: '+',
+                left: '1',
+                right: '1',
+              },
+            },
+            {
+              key: 'b',
+              val: {
+                type: 'CondExpr',
+                test: {
+                  type: 'BinaryExpr',
+                  op: '&&',
+                  left: 'x',
+                  right: 'y',
+                },
+                ifYes: 'z',
+                ifNo: {
+                  type: 'CondExpr',
+                  test: 't',
+                  ifYes: 'w',
+                  ifNo: {
+                    type: 'CondExpr',
+                    test: 'u',
+                    ifYes: {
+                      type: 'BinaryExpr',
+                      op: '+',
+                      left: 'v',
+                      right: {
+                        type: 'BinaryExpr',
+                        op: '**',
+                        left: '2',
+                        right: { type: 'UnaryExpr', op: '-', arg: '2' },
+                      },
+                    },
+                    ifNo: '3',
+                  },
+                },
+              },
+            },
+            {
+              key: 'c',
+              val: {
+                type: 'RecordLiteral',
+                pairs: [
+                  { key: 'i', val: '0' },
+                  { key: 'j', val: '1' },
+                  { key: 'k', val: '2' },
+                ],
+              },
+            },
+            {
+              key: 'd',
+              val: {
+                type: 'CondExpr',
+                test: 'foo',
+                ifYes: {
+                  type: 'RecordLiteral',
+                  pairs: [{ key: 'n', val: '123' }],
+                },
+                ifNo: {
+                  type: 'RecordLiteral',
+                  pairs: [{ key: 'n', val: '321' }],
+                },
+              },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('comma-first', () => {
+        const observed = parser.PrimaryExpr.tryParse(
+          `{ a: 1
+           , b: 2
+           , c: 3
+           }`)
+        const expected = {
+          type: 'RecordLiteral',
+          pairs: [
+            { key: 'a', val: '1' },
+            { key: 'b', val: '2' },
+            { key: 'c', val: '3' },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('field names must be valid identifiers', () => {
+        assert(!parser.PrimaryExpr.parse('{ invalid__ident: 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ _invalid: 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ $invalid: 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ "not an identifier at all": 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ 5: 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ [1+1]: 1 }').status)
+        assert(!parser.PrimaryExpr.parse('{ method() { Return 10 } }').status)
       })
     })
   })

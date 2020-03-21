@@ -148,7 +148,7 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
       unlike Python, constructions like `a < b > c` are prohibited (they have
       to point the same way), and `!=` can't be chained at all.
     + (`!=` can't be chained because should `1 != 2 != 1` be true or false?)
-- No [holes] in arrays (trailing commas are allowed in array literals though)
+- No [holes] in arrays (trailing commas are allowed though)
 
         // valid:
         [ 1, 2 ]
@@ -162,6 +162,27 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
         [ 1, , 2 ]
         [ 1, 2,, ]
 
+- Mechanical records are much more restricted than JS objects. Field names must
+  be valid identifiers, not arbitrary strings or numerals, and cannot be quoted.
+  They also cannot be [computed], cannot be [method definitions], and there are
+  no [getters or setters]. Trailing commas are allowed though!
+
+        // valid
+        { valid_identifier: 1 }
+
+        // invalid
+        {
+          invalid__ident: 1,
+          _invalid: 2,
+          $invalid: 3,
+          "not an identifier at all": 4,
+          5: 6,
+          [compute(7, 8)]: 9,
+          method() {
+            Return 10
+          },
+        }
+
 - No bitwise operators
     + We have none of `~`, `&`, `|`, `<<`, `>>`, `>>>` built-in, but I hope to
       introduce a built-in macro
@@ -174,6 +195,9 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
     + No comma operator
 
 [holes]: https://2ality.com/2015/09/holes-arrays-es6.html
+[computed]: https://2ality.com/2014/12/es6-oop.html#computed-property-keys
+[method definition]: https://2ality.com/2014/12/es6-oop.html#method-definitions
+[getters or setters]: https://2ality.com/2015/08/object-literals-es5.html#ecmascript-5-has-getters-and-setters
 
 ## License: Blue Oak or MIT
 

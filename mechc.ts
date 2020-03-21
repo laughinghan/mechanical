@@ -33,24 +33,35 @@ export const parser = createLanguage({
   // Expression Grammar (based on JS)
   //   https://tc39.es/ecma262/#sec-ecmascript-language-expressions
   //
-  Identifier: () => r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i), // TODO non-English letters etc
-  Numeral: () => r(/\d+/), // TODO decimals, exponential notation
-  StringLiteral: () => r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/),
+  Identifier: () => r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i) // TODO non-English letters etc
+    .desc('identifier (e.g. example_identifier)'),
+  Numeral: () => r(/\d+/).desc('numeral (e.g. 123)'), // TODO decimals, exponential notation
+  StringLiteral: () => r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
+    .desc(`string literal (e.g. "..." or '...')`),
   ArrayLiteral: ({ _, Expression }) => s('[').then(_).then(
     Expression.sepBy(s(',').trim(_))
     .skip(seq(_, s(',')).or(succeed(''))) // optional trailing comma
     .map(exprs => ({ type: 'ArrayLiteral', exprs }))
-  ).skip(_).skip(s(']')),
+  ).skip(_).skip(s(']'))
+    .desc('array literal (e.g. [ ... ])'),
+  RecordLiteral: ({ _, Identifier, Expression }) => s('{').then(_).then(
+    seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
+      (key, val) => (val === null ? { key, val: key } : { key, val }))
+    .sepBy(s(',').trim(_)).skip(seq(_, s(',')).or(succeed(''))) // optional trailing comma
+    .map(pairs => ({ type: 'RecordLiteral', pairs }))
+  ).skip(_).skip(s('}'))
+    .desc('record literal (e.g. { ... })'),
 
   PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
       // are the smallest units, which are either actual leaf nodes (variables,
       // numberals, string literals) or delimited groups (parenthesized exprs,
-      // array literals, object literals, function calls, anonymous functions).
+      // array literals, record literals, function calls, anonymous functions).
       // They are the operands to the tightest-binding operator
     L.Identifier,
     L.Numeral,
     L.StringLiteral,
     L.ArrayLiteral,
+    L.RecordLiteral,
   ),
   UnaryExpr: ({_, PrimaryExpr }) => alt( // (tightest-binding operator)
     PrimaryExpr,
