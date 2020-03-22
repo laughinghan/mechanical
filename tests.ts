@@ -124,6 +124,10 @@ suite('Parser', () => {
         assert(!parser.PrimaryExpr.parse('[ 1, , 2 ]').status)
         assert(!parser.PrimaryExpr.parse('[ 1, 2,, ]').status)
       })
+      test('invalid single comma [,]', () => {
+        assert(!parser.PrimaryExpr.parse('[,]').status)
+        assert(!parser.PrimaryExpr.parse('[ , ]').status)
+      })
       test('invalid (missing comma) [1 2]', () => {
         assert(!parser.PrimaryExpr.parse('[1 2]').status)
         assert(!parser.PrimaryExpr.parse('[[1] 2]').status)
@@ -297,6 +301,10 @@ suite('Parser', () => {
         assert(!parser.PrimaryExpr.parse('{ 5: 1 }').status)
         assert(!parser.PrimaryExpr.parse('{ [1+1]: 1 }').status)
         assert(!parser.PrimaryExpr.parse('{ method() { Return 10 } }').status)
+      })
+      test('invalid single comma {,}', () => {
+        assert(!parser.PrimaryExpr.parse('{,}').status)
+        assert(!parser.PrimaryExpr.parse('{ , }').status)
       })
     })
   })

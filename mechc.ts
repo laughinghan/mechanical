@@ -20,6 +20,16 @@ function leftRecur<Expr, Op>(
     rest.reduce((left, [op, right]) => map(op, left, right), first))
 }
 
+// many <parser>'s separated by <separator>, with optional trailing <separator>
+//   Usage: <parser>.thru(sepByOptTrailing(<separator>))
+function sepByOptTrailing<R>(separator: Parser<unknown>) {
+  return (parser: Parser<R>) => seqMap(
+    parser.skip(separator).many(),
+    parser.map(r => [r]).or(succeed([])),
+    (results, result) => results.concat(result)
+  )
+}
+
 export const parser = createLanguage({
   // Whitespace
   _: () => r(/[ \n]*/),  // optional whitespace
@@ -38,18 +48,17 @@ export const parser = createLanguage({
   Numeral: () => r(/\d+/).desc('numeral (e.g. 123)'), // TODO decimals, exponential notation
   StringLiteral: () => r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`),
-  ArrayLiteral: ({ _, Expression }) => s('[').then(_).then(
-    Expression.sepBy(s(',').trim(_))
-    .skip(seq(_, s(',')).or(succeed(''))) // optional trailing comma
+  ArrayLiteral: ({ _, Expression }) => s('[').then(
+    Expression.thru(sepByOptTrailing(s(',').trim(_))).trim(_)
     .map(exprs => ({ type: 'ArrayLiteral', exprs }))
-  ).skip(_).skip(s(']'))
+  ).skip(s(']'))
     .desc('array literal (e.g. [ ... ])'),
-  RecordLiteral: ({ _, Identifier, Expression }) => s('{').then(_).then(
+  RecordLiteral: ({ _, Identifier, Expression }) => s('{').then(
     seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
       (key, val) => (val === null ? { key, val: key } : { key, val }))
-    .sepBy(s(',').trim(_)).skip(seq(_, s(',')).or(succeed(''))) // optional trailing comma
+    .thru(sepByOptTrailing(s(',').trim(_))).trim(_)
     .map(pairs => ({ type: 'RecordLiteral', pairs }))
-  ).skip(_).skip(s('}'))
+  ).skip(s('}'))
     .desc('record literal (e.g. { ... })'),
 
   PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
