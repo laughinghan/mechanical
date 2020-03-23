@@ -742,4 +742,69 @@ suite('Parser', () => {
       })
     })
   })
+
+  suite('Statements', () => {
+    suite('LetStmt', () => {
+      test('basic Let a = 1', () => {
+        const observed = parser.LetStmt.tryParse('Let a = 1\n')
+        const expected = {
+          type: 'LetStmt',
+          varName: 'a',
+          expr: '1',
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('bigger expression', () => {
+        const observed = parser.LetStmt.tryParse('Let y = 2*x**3*4\n')
+        const expected = {
+          type: 'LetStmt',
+          varName: 'y',
+          expr: {
+            type: 'BinaryExpr',
+            op: '*',
+            left: {
+              type: 'BinaryExpr',
+              op: '*',
+              left: '2',
+              right: {
+                type: 'BinaryExpr',
+                op: '**',
+                left: 'x',
+                right: '3',
+              },
+            },
+            right: '4',
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('less whitespace Let x=1+2', () => {
+        const observed = parser.LetStmt.tryParse('Let x=1+2\n')
+        const expected = {
+          type: 'LetStmt',
+          varName: 'x',
+          expr: {
+            type: 'BinaryExpr',
+            op: '+',
+            left: '1',
+            right: '2',
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('missing whitespace Letx = 1', () => {
+        assert(!parser.LetStmt.parse('Letx = 1\n').status)
+        assert(!parser.LetStmt.parse('Let x = 1').status)
+      })
+      test('comment Let x = 1 // comment', () => {
+        const observed = parser.LetStmt.tryParse('Let x = 1 // comment\n')
+        const expected = {
+          type: 'LetStmt',
+          varName: 'x',
+          expr: '1',
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+    })
+  })
 })

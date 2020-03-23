@@ -37,6 +37,8 @@ export const parser = createLanguage({
   // Note that Tabs are banned, as are exotic whitespace \a\b\v\f\r. Banned
   // whitespace should be treated like control characters and non-printing
   // characters
+  EOL: () => r(/[ \n]*(?:\/\/[^\n]*)?\n/).desc('end-of-line'), // end-of-line,
+    // including optional whitespace and line comment
 
 
   //
@@ -159,6 +161,17 @@ export const parser = createLanguage({
 
 
   //
+  // Statements
+  // allowed in the body of an event handler declaration, or in a cmd {} block
+  //
+  LetStmt: ({ _, __, Identifier, Expression, EOL }) => s('Let').skip(__).then(
+    seqMap(Identifier.skip(seq(s('=').trim(_))), Expression,
+      (varName, expr) => ({ type: 'LetStmt', varName, expr }))
+  ).skip(EOL),
+  StatementBlock: L => L.LetStmt,
+
+
+  //
   // Top-Level Declarations
   //
   StateDecl: ({ _, __, Identifier }) =>
@@ -169,8 +182,5 @@ export const parser = createLanguage({
       _,
       s('='),
       _,
-    )
-
-
-  // top-level statements in an event handler declaration
+    ),
 })
