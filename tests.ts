@@ -448,6 +448,28 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
+      test('stmt block with comment', () => {
+        const observed = parser.Expression.tryParse(`x => {
+          Let y = x + 1 // comment
+          Return 2*y
+        }`)
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: [
+            {
+              type: 'LetStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ReturnStmt',
+              expr: { type: 'BinaryExpr', op: '*', left: '2', right: 'y' },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
     })
   })
 
@@ -888,7 +910,7 @@ suite('Parser', () => {
   suite('Statements', () => {
     suite('LetStmt', () => {
       test('basic Let a = 1', () => {
-        const observed = parser.LetStmt.tryParse('Let a = 1\n')
+        const observed = parser.LetStmt.tryParse('Let a = 1')
         const expected = {
           type: 'LetStmt',
           varName: 'a',
@@ -897,7 +919,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('bigger expression', () => {
-        const observed = parser.LetStmt.tryParse('Let y = 2*x**3*4\n')
+        const observed = parser.LetStmt.tryParse('Let y = 2*x**3*4')
         const expected = {
           type: 'LetStmt',
           varName: 'y',
@@ -921,7 +943,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('less whitespace Let x=1+2', () => {
-        const observed = parser.LetStmt.tryParse('Let x=1+2\n')
+        const observed = parser.LetStmt.tryParse('Let x=1+2')
         const expected = {
           type: 'LetStmt',
           varName: 'x',
@@ -935,17 +957,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('missing whitespace Letx = 1', () => {
-        assert(!parser.LetStmt.parse('Letx = 1\n').status)
-        assert(!parser.LetStmt.parse('Let x = 1').status)
-      })
-      test('comment Let x = 1 // comment', () => {
-        const observed = parser.LetStmt.tryParse('Let x = 1 // comment\n')
-        const expected = {
-          type: 'LetStmt',
-          varName: 'x',
-          expr: '1',
-        }
-        assert.deepStrictEqual(observed, expected)
+        assert(!parser.LetStmt.parse('Letx = 1').status)
       })
     })
   })

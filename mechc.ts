@@ -177,18 +177,19 @@ export const parser = createLanguage({
   // Statements
   // allowed in the body of an event handler declaration, or in a cmd {} block
   //
-  LetStmt: ({ _, __, Identifier, Expression, EOL }) => s('Let').then(__).then(
-    seqMap(Identifier.skip(s('=').trim(_)), Expression,
-      (varName, expr) => ({ type: 'LetStmt', varName, expr }))
-  ).skip(EOL),
-  ReturnStmt: ({ _, __, Expression, EOL }) => s('Return').then(__).then(
-    Expression.map(expr => ({ type: 'ReturnStmt', expr }))
-  ).skip(EOL),
+  LetStmt: ({ _, __, Identifier, Expression, EOL }) => seqMap(
+    s('Let').then(__).then(Identifier), s('=').trim(_).then(Expression),
+    (varName, expr) => ({ type: 'LetStmt', varName, expr }),
+  ),
+  ReturnStmt: ({ _, __, Expression, EOL }) =>
+    s('Return').then(__).then(Expression)
+    .map(expr => ({ type: 'ReturnStmt', expr })),
   Statement: L => alt(
     L.LetStmt,
     L.ReturnStmt,
   ),
-  StatementBlock: ({ _, Statement }) => Statement.skip(_).many(),
+  StatementBlock: ({ Statement, EOL, _ }) =>
+    Statement.skip(EOL).skip(_).many(),
 
 
   //
