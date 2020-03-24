@@ -82,8 +82,8 @@ Which will output: `some_file.js`
 
 Mechanical-specific extensions to JS expression syntax (which only make sense
 with Mechanical semantics, and wouldn't make sense for JS:
-- `Cmd { ... }`
-- Hashtagged values `#tag value` and pattern-matching `match tagged {...}`
+- (TODO) `Cmd { ... }`
+- (TODO) Hashtagged values `#tag value` and pattern-matching `match tagged {...}`
 
         Let x = Current switch_state ? #on 72 : #off "sleeping for the night"
         // expression-form pattern-matching:
@@ -99,8 +99,8 @@ with Mechanical semantics, and wouldn't make sense for JS:
 Extensions to JavaScript features:
 - Multiline strings
     + Both string literals (`""` and `''`) can have newlines in them, but
-      subsequent lines must be indented to at least the same level as the
-      open-quote:
+      (TODO) subsequent lines must be indented to at least the same level as
+      the open-quote:
 
         When button.Click:
             Let valid_string = "first line
@@ -111,7 +111,7 @@ Extensions to JavaScript features:
             Let invalid_string = "first line
           second line" // error!
 
-- Alternate string interpolation syntax <code>$`text {expression} text`</code>
+- (TODO) Alternate string interpolation syntax <code>$`text {expression} text`</code>
     + In addition to JS [template literal syntax] (e.g.
       <code>`text ${expression} text`</code>), Mechanical supports an alternative
       string interpolation syntax where you prefix the string with `$`:
@@ -122,7 +122,7 @@ Extensions to JavaScript features:
           // are all equivalent to:
           `text ${expression} text`
 
-      This is similar to C# but without format specifiers.
+      This is similar to C# but without support for format specifiers.
 
 [template literal syntax]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
 
