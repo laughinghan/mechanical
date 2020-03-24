@@ -181,7 +181,14 @@ export const parser = createLanguage({
     seqMap(Identifier.skip(seq(s('=').trim(_))), Expression,
       (varName, expr) => ({ type: 'LetStmt', varName, expr }))
   ).skip(EOL),
-  StatementBlock: L => L.LetStmt,
+  ReturnStmt: ({ _, __, Expression, EOL }) => s('Return').then(__).then(
+    Expression.map(expr => ({ type: 'ReturnStmt', expr }))
+  ).skip(EOL),
+  Statement: L => alt(
+    L.LetStmt,
+    L.ReturnStmt,
+  ),
+  StatementBlock: ({ _, Statement }) => Statement.skip(_).many(),
 
 
   //

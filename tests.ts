@@ -426,6 +426,28 @@ suite('Parser', () => {
         assert(!parser.Expression.parse('() => 1').status)
         assert(!parser.Expression.parse('(x, y,) => 1').status)
       })
+      test('stmt block', () => {
+        const observed = parser.Expression.tryParse(`x => {
+          Let y = x + 1
+          Return 2*y
+        }`)
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: [
+            {
+              type: 'LetStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ReturnStmt',
+              expr: { type: 'BinaryExpr', op: '*', left: '2', right: 'y' },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
     })
   })
 
