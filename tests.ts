@@ -309,7 +309,7 @@ suite('Parser', () => {
     })
     suite('ArrowFunc', () => {
       test('basic x => x**2', () => {
-        const observed = parser.PrimaryExpr.tryParse('x => x**2')
+        const observed = parser.Expression.tryParse('x => x**2')
         const expected = {
           type: 'ArrowFunc',
           params: ['x'],
@@ -403,6 +403,11 @@ suite('Parser', () => {
           },
         }
         assert.deepStrictEqual(observed, expected)
+      })
+      test('prohibit arrow func nested in exprs except CondExpr', () => {
+        assert(!parser.Expression.parse('- x => x').status)
+        assert(!parser.Expression.parse('x + y => y').status)
+        assert(!parser.Expression.parse('x || y => y').status)
       })
       test('paren params (x) => 1', () => {
         const observed = parser.Expression.tryParse('(x) => 1')

@@ -62,25 +62,12 @@ export const parser = createLanguage({
     .map(pairs => ({ type: 'RecordLiteral', pairs }))
   ).skip(s('}'))
     .desc('record literal (e.g. { ... })'),
-  ArrowFunc: ({ _, Identifier, StatementBlock, Expression }) => seqMap(
-    alt(
-      Identifier.map(Array),
-      s('(').then(Identifier.sepBy1(s(',').trim(_)).trim(_)).skip(s(')')),
-    )
-    .skip(s('=>').trim(_)),
-    alt(
-      s('{').then(StatementBlock.trim(_)).skip(s('}')),
-      Expression,
-    ),
-    (params, body) => ({ type: 'ArrowFunc', params, body })
-  ),
 
   PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
       // are the smallest units, which are either actual leaf nodes (variables,
       // numberals, string literals) or delimited groups (parenthesized exprs,
       // array literals, record literals, function calls, anonymous functions).
       // They are the operands to the tightest-binding operator
-    L.ArrowFunc,
     L.Identifier,
     L.Numeral,
     L.StringLiteral,
@@ -165,12 +152,24 @@ export const parser = createLanguage({
     AndExpr, s('||').trim(_),
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   ),
-  CondExpr: ({ CondExpr, OrExpr, _ }) => alt(
-    seqMap(OrExpr.skip(s('?').trim(_)), CondExpr.skip(s(':').trim(_)), CondExpr,
+  CondExpr: ({ OrExpr, Expression, _ }) => alt(
+    seqMap(OrExpr.skip(s('?').trim(_)), Expression.skip(s(':').trim(_)), Expression,
       (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
     OrExpr,
   ),
-  Expression: ({ CondExpr }) => CondExpr,
+  ArrowFunc: ({ _, Identifier, StatementBlock, Expression }) => seqMap(
+    alt(
+      Identifier.map(Array),
+      s('(').then(Identifier.sepBy1(s(',').trim(_)).trim(_)).skip(s(')')),
+    )
+    .skip(s('=>').trim(_)),
+    alt(
+      s('{').then(StatementBlock.trim(_)).skip(s('}')),
+      Expression,
+    ),
+    (params, body) => ({ type: 'ArrowFunc', params, body })
+  ),
+  Expression: ({ ArrowFunc, CondExpr }) => alt(ArrowFunc, CondExpr),
 
 
   //
