@@ -307,6 +307,126 @@ suite('Parser', () => {
         assert(!parser.PrimaryExpr.parse('{ , }').status)
       })
     })
+    suite('ArrowFunc', () => {
+      test('basic x => x**2', () => {
+        const observed = parser.PrimaryExpr.tryParse('x => x**2')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: {
+            type: 'BinaryExpr',
+            op: '**',
+            left: 'x',
+            right: '2',
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('looser than CondExpr from the left x => x ? 1 : -1', () => {
+        const observed = parser.Expression.tryParse('x => x ? 1 : -1')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: {
+            type: 'CondExpr',
+            test: 'x',
+            ifYes: '1',
+            ifNo: {
+              type: 'UnaryExpr',
+              op: '-',
+              arg: '1',
+            },
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('tighter than CondExpr from the right x ? y => y+1 : y => y+2', () => {
+        const observed = parser.Expression.tryParse('x ? y => y+1 : y => y+2')
+        const expected = {
+          type: 'CondExpr',
+          test: 'x',
+          ifYes: {
+            type: 'ArrowFunc',
+            params: ['y'],
+            body: {
+              type: 'BinaryExpr',
+              op: '+',
+              left: 'y',
+              right: '1',
+            },
+          },
+          ifNo: {
+            type: 'ArrowFunc',
+            params: ['y'],
+            body: {
+              type: 'BinaryExpr',
+              op: '+',
+              left: 'y',
+              right: '2',
+            },
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('nested CondExpr & ArrowFunc', () => {
+        const observed = parser.Expression.tryParse('x ? y => y ? 1 : 2 : y => y ? -1 : -2')
+        const expected = {
+          type: 'CondExpr',
+          test: 'x',
+          ifYes: {
+            type: 'ArrowFunc',
+            params: ['y'],
+            body: {
+              type: 'CondExpr',
+              test: 'y',
+              ifYes: '1',
+              ifNo: '2',
+            },
+          },
+          ifNo: {
+            type: 'ArrowFunc',
+            params: ['y'],
+            body: {
+              type: 'CondExpr',
+              test: 'y',
+              ifYes: {
+                type: 'UnaryExpr',
+                op: '-',
+                arg: '1',
+              },
+              ifNo: {
+                type: 'UnaryExpr',
+                op: '-',
+                arg: '2',
+              },
+            },
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('paren params (x) => 1', () => {
+        const observed = parser.Expression.tryParse('(x) => 1')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: '1',
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('multiple params (x,y,z) => 1', () => {
+        const observed = parser.Expression.tryParse('(x,y,z) => 1')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x', 'y', 'z'],
+          body: '1',
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('no empty params or trailing commas, () => 1, (x, y,) => 1', () => {
+        assert(!parser.Expression.parse('() => 1').status)
+        assert(!parser.Expression.parse('(x, y,) => 1').status)
+      })
+    })
   })
 
   suite('expression operator precedence stack', () => {

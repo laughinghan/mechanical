@@ -183,6 +183,21 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
           },
         }
 
+- Only arrow function expressions (e.g. `x => 2*x`) are supported (no
+  `function (x) { return 2*x }`-style function expressions), functions must
+  take at least one argument (all functions are pure, so what would a
+  no-argument function do?), and trailing commas aren't allowed
+  (TODO: method-calling syntax/UFCS, named args when >2 params)
+
+        // valid
+        x => 2*x
+        (x, y) => sqrt(x**2 + y**2)
+
+        // invalid
+        () => 1
+        (x, y,) => sqrt(x**2 + y**2)
+        function (x) { return 2*x }
+
 - No bitwise operators
     + We have none of `~`, `&`, `|`, `<<`, `>>`, `>>>` built-in, but I hope to
       introduce a built-in macro
