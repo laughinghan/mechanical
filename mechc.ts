@@ -57,7 +57,7 @@ export const parser = createLanguage({
     .desc('array literal (e.g. [ ... ])'),
   RecordLiteral: ({ _, Identifier, Expression }) => s('{').then(
     seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
-      (key, val) => (val === null ? { key, val: key } : { key, val }))
+      (key, val) => ({ key, val: val ?? key }))
     .thru(sepByOptTrailing(s(',').trim(_))).trim(_)
     .map(pairs => ({ type: 'RecordLiteral', pairs }))
   ).skip(s('}'))
@@ -88,13 +88,13 @@ export const parser = createLanguage({
     L.RecordLiteral,
   ),
   UnaryExpr: ({_, PrimaryExpr }) => alt( // (tightest-binding operator)
+    seqMap(r(/[-!]/).skip(_), PrimaryExpr,
+      (op, arg) => ({ type: 'UnaryExpr', op, arg })),
     PrimaryExpr,
-    seqMap(r(/[-!]/), _, PrimaryExpr,
-      (op, _, arg) => ({ type: 'UnaryExpr', op, arg })),
   ),
   ExponentExpr: ({ PrimaryExpr, _, UnaryExpr }) => alt(
-    seqMap(PrimaryExpr, s('**').trim(_), UnaryExpr,
-      (left, _, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
+    seqMap(PrimaryExpr.skip(s('**').trim(_)), UnaryExpr,
+      (left, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
         // Note 1: as a special exception to typical operator precedence,
         // exponents binds equally tightly leftwards as UnaryExpr, to avoid the
         // ambiguity of whether -2**2 is (-2)**2 = 4 or -(2**2) = -4
@@ -123,8 +123,8 @@ export const parser = createLanguage({
   InequalityExpr: ({ AddExpr, _ }) => seqMap( // mutually exclusive precedence with
       // other comparisons and may not be chained, because (1 != 2 != 1) == #yes
       // would be weird, but anything else would require quadratic comparisons
-    AddExpr, s('!=').trim(_), AddExpr,
-    (left, _, right) => ({ type: 'InequalityExpr', left, right })
+    AddExpr.skip(s('!=').trim(_)), AddExpr,
+    (left, right) => ({ type: 'InequalityExpr', left, right })
   ),
   CompareChainExpr: ({ AddExpr, _ }) => seqMap(
     AddExpr,
@@ -166,8 +166,8 @@ export const parser = createLanguage({
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   ),
   CondExpr: ({ CondExpr, OrExpr, _ }) => alt(
-    seqMap(OrExpr, s('?').trim(_), CondExpr, s(':').trim(_), CondExpr,
-      (test, _, ifYes, __, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
+    seqMap(OrExpr.skip(s('?').trim(_)), CondExpr.skip(s(':').trim(_)), CondExpr,
+      (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
     OrExpr,
   ),
   Expression: ({ CondExpr }) => CondExpr,
@@ -177,8 +177,8 @@ export const parser = createLanguage({
   // Statements
   // allowed in the body of an event handler declaration, or in a cmd {} block
   //
-  LetStmt: ({ _, __, Identifier, Expression, EOL }) => s('Let').skip(__).then(
-    seqMap(Identifier.skip(seq(s('=').trim(_))), Expression,
+  LetStmt: ({ _, __, Identifier, Expression, EOL }) => s('Let').then(__).then(
+    seqMap(Identifier.skip(s('=').trim(_)), Expression,
       (varName, expr) => ({ type: 'LetStmt', varName, expr }))
   ).skip(EOL),
   ReturnStmt: ({ _, __, Expression, EOL }) => s('Return').then(__).then(
