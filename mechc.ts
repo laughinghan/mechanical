@@ -194,7 +194,14 @@ export function parserAtIndent(indent: string) {
       )
       .skip(s('=>').trim(_)),
       alt(
-        lookahead(/[^{]/).then(Expression),
+        lookahead(/[^{]/).then(Expression), // negative lookahead to prohibit
+          // record literals, same as JS, even though our statement syntax is
+          // actually restrictive enough that it's not ambiguous, unlike JS.
+          // It's still nice to reduce visual ambiguity, i.e. syntax that
+          // visually looks similar and you would have to look closely to
+          // disambiguate. Same reasoning for indentation-sensitivity
+          // TODO: reconsider this, we could just let syntax highlighting
+          //       ameliorate any visual ambiguity
         StatementBraceBlock,
       ),
       (params, body) => ({ type: 'ArrowFunc', params, body })

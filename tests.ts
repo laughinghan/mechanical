@@ -519,6 +519,9 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
+      test('record literal not allowed as expression, same as JS x => { x }', () => {
+        assert(!parser.Expression.parse('x => { x }').status)
+      })
     })
   })
 
