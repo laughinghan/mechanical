@@ -1,7 +1,8 @@
 import 'mocha'
 import assert from 'assert'
+import { Failure } from 'parsimmon'
 
-import { parser } from './mechc'
+import { parserAtIndent, parser } from './mechc'
 
 suite('Parser', () => {
   test('StateDecl', () => {
@@ -63,6 +64,49 @@ suite('Parser', () => {
       test('multiline single-quotes', () => {
         const observed = parser.PrimaryExpr.tryParse("'first line\nsecond line'")
         const expected = "'first line\nsecond line'"
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('indented multiline double-quotes', () => {
+        const indentedParser = parserAtIndent('  ')
+        const observed = indentedParser.PrimaryExpr.tryParse('"first\n  second\n    third\n  fourth"')
+        const expected = '"first\nsecond\n  third\nfourth"'
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('indented multiline single-quotes', () => {
+        const indentedParser = parserAtIndent('  ')
+        const observed = indentedParser.PrimaryExpr.tryParse("'first\n  second\n    third\n  fourth'")
+        const expected = "'first\nsecond\n  third\nfourth'"
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('multiline string requires indent', () => {
+        const indentedParser = parserAtIndent('    ')
+        const result = indentedParser.PrimaryExpr.parse('"first\n   second"')
+        assert(!result.status)
+        assert.strictEqual((result as Failure).index.offset, 10)
+      })
+      test('multiline string inside arrow func integration test', () => {
+        const indentedParser = parserAtIndent('    ')
+        const observed = indentedParser.Expression.tryParse('x => {\n'
+          + '        Let y = "first\n'
+          + '          second\n'
+          + '        third"\n'
+          + '        Return y\n'
+          + '    }')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: [
+            {
+              type: 'LetStmt',
+              varName: 'y',
+              expr: '"first\n  second\nthird"',
+            },
+            {
+              type: 'ReturnStmt',
+              expr: 'y',
+            },
+          ],
+        }
         assert.deepStrictEqual(observed, expected)
       })
       test('mismatched quotes', () => {
@@ -431,11 +475,10 @@ suite('Parser', () => {
         assert(!parser.Expression.parse('() => 1').status)
         assert(!parser.Expression.parse('(x, y,) => 1').status)
       })
-      test('stmt block', () => {
-        const observed = parser.Expression.tryParse(`x => {
-          Let y = x + 1
-          Return 2*y
-        }`)
+      test('one-liner stmt block', () => {
+        const indentedParser = parserAtIndent('    ')
+        const observed = indentedParser.Expression.tryParse(
+          'x => { Let y = x + 1 ; Return 2*y }')
         const expected = {
           type: 'ArrowFunc',
           params: ['x'],
@@ -453,11 +496,12 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('stmt block with comment', () => {
-        const observed = parser.Expression.tryParse(`x => {
-          Let y = x + 1 // comment
-          Return 2*y
-        }`)
+      test('indented stmt block', () => {
+        const indentedParser = parserAtIndent('    ')
+        const observed = indentedParser.Expression.tryParse('x => {\n'
+          + '        Let y = x + 1\n'
+          + '        Return 2*y\n'
+          + '    }')
         const expected = {
           type: 'ArrowFunc',
           params: ['x'],
@@ -963,6 +1007,131 @@ suite('Parser', () => {
       })
       test('missing whitespace Letx = 1', () => {
         assert(!parser.LetStmt.parse('Letx = 1').status)
+      })
+    })
+
+    suite('StatementBraceBlock', () => {
+      test('nested arrow function statement blocks', () => {
+        const indentedParser = parserAtIndent('    ')
+        const observed = indentedParser.Expression.tryParse('x => {\n'
+          + '        Let f = y => {\n'
+          + '            Return y + 1\n'
+          + '        }\n'
+          + '        Let z = x + 2\n'
+          + '        Return { z, f }\n'
+          + '    }')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: [
+            {
+              type: 'LetStmt',
+              varName: 'f',
+              expr: {
+                type: 'ArrowFunc',
+                params: ['y'],
+                body: [{
+                  type: 'ReturnStmt',
+                  expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '1' },
+                }],
+              },
+            },
+            {
+              type: 'LetStmt',
+              varName: 'z',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '2' },
+            },
+            {
+              type: 'ReturnStmt',
+              expr: {
+                type: 'RecordLiteral',
+                pairs: [
+                  { key: 'z', val: 'z' },
+                  { key: 'f', val: 'f' },
+                ],
+              },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('nested arrow functions with comments', () => {
+        const indentedParser = parserAtIndent('    ')
+        const observed = indentedParser.Expression.tryParse('x => { // comment \n'
+          + '        Let f = y => { // comment \n'
+          + '            Return y + 1 // comment, with close-brace } \n'
+          + '        } // comment \n'
+          + '        Let z = x + 2 // + comment \n'
+          + '        Return { z, f } // unmatched open-quote in comment: " \n'
+          + '    }')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: [
+            {
+              type: 'LetStmt',
+              varName: 'f',
+              expr: {
+                type: 'ArrowFunc',
+                params: ['y'],
+                body: [{
+                  type: 'ReturnStmt',
+                  expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '1' },
+                }],
+              },
+            },
+            {
+              type: 'LetStmt',
+              varName: 'z',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '2' },
+            },
+            {
+              type: 'ReturnStmt',
+              expr: {
+                type: 'RecordLiteral',
+                pairs: [
+                  { key: 'z', val: 'z' },
+                  { key: 'f', val: 'f' },
+                ],
+              },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('indent errors', () => {
+        const indentedParser = parserAtIndent('    ')
+        const notIndented = indentedParser.Statement.parse('Return x => {\n'
+          + '    Return x + 1\n'
+          + '    }')
+        assert(!notIndented.status)
+        assert.strictEqual((notIndented as Failure).index.offset, 18)
+
+        const closeBraceIndented = indentedParser.Statement.parse('Return x => {\n'
+          + '        Return x + 1\n'
+          + '        }')
+        assert(!closeBraceIndented.status)
+        assert.strictEqual((closeBraceIndented as Failure).index.offset, 43)
+
+        const closeBraceUnindented = indentedParser.Statement.parse('Return x => {\n'
+          + '        Return x + 1\n'
+          + '  }')
+        assert(!closeBraceUnindented.status)
+        assert.strictEqual((closeBraceUnindented as Failure).index.offset, 37)
+
+        const mismatchedIndent = indentedParser.Statement.parse('Return x => {\n'
+          + '        Let y = x + 1\n'
+          + '      Return y - 1\n'
+          + '    }')
+        assert(!mismatchedIndent.status)
+        assert.strictEqual((mismatchedIndent as Failure).index.offset, 42)
+
+        const overIndented = indentedParser.Statement.parse('Return x => {\n'
+          + '        Let y = x + 1\n'
+          + '          Return y - 1\n'
+          + '    }')
+        assert(!overIndented.status)
+        assert.strictEqual((overIndented as Failure).index.offset, 46)
       })
     })
   })

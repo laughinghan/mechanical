@@ -99,8 +99,8 @@ with Mechanical semantics, and wouldn't make sense for JS:
 Extensions to JavaScript features:
 - Multiline strings
     + Both string literals (`""` and `''`) can have newlines in them, but
-      (TODO) subsequent lines must be indented to at least the same level as
-      the open-quote:
+      subsequent lines must be indented to at least the same level as the
+      open-quote; that indentation is then omitted from the result:
 
         When button.Click:
             Let valid_string = "first line
