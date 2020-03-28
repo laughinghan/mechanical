@@ -1,4 +1,6 @@
-# Mechanical
+# Mechanical [![Chat on Gitter](https://badges.gitter.im/mechanical-lang/community.svg)][Gitter]
+
+[Gitter]: https://gitter.im/mechanical-lang/community
 
 A language that makes building webapps (and more!) as easy as building
 finite-state machines.
