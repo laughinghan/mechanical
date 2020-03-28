@@ -813,6 +813,19 @@ suite('Parser', () => {
       })
       test('improper chaining a < b > c', () => {
         assert(!parser.CompareExpr.parse('a < b > c').status)
+        const observed = parser.CompareExpr.tryParse('a < (b > c)')
+        const expected = {
+          type: 'BinaryExpr',
+          op: '<',
+          left: 'a',
+          right: {
+            type: 'BinaryExpr',
+            op: '>',
+            left: 'b',
+            right: 'c',
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
       })
       test('chaining starting with equals a == b < c', () => {
         const observed = parser.OrExpr.tryParse('a == b < c')
@@ -936,13 +949,10 @@ suite('Parser', () => {
             type: 'BinaryExpr',
             op: '&&',
             left: {
-              type: 'CompareChainExpr',
-              chain: [{
-                type: 'BinaryExpr',
-                op: '==',
-                left: 'a',
-                right: 'b',
-              }],
+              type: 'BinaryExpr',
+              op: '==',
+              left: 'a',
+              right: 'b',
             },
             right: {
               type: 'CompareChainExpr',

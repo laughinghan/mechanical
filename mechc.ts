@@ -161,17 +161,24 @@ export function parserAtIndent(indent: string) {
         ),
         (undirected, directed) => undirected.concat(directed)
       ),
-      (first, rest) => rest.length
-        ? ({
-            type: 'CompareChainExpr',
-            chain: rest.map(([op, arg], i) => ({
+      (first, rest) => rest.length == 0
+        ? first
+        : rest.length === 1
+          ? {
               type: 'BinaryExpr',
-              op,
-              left: i ? rest[i-1][1] : first,
-              right: arg,
-            })),
-          })
-        : first
+              op: rest[0][0],
+              left: first,
+              right: rest[0][1],
+            }
+          : ({
+              type: 'CompareChainExpr',
+              chain: rest.map(([op, arg], i) => ({
+                type: 'BinaryExpr',
+                op,
+                left: i ? rest[i-1][1] : first,
+                right: arg,
+              })),
+            })
     ),
     CompareExpr: ({ InequalityExpr, CompareChainExpr }) =>
       alt(InequalityExpr, CompareChainExpr),
