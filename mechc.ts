@@ -92,12 +92,15 @@ export function parserAtIndent(indent: string) {
       .map(pairs => ({ type: 'RecordLiteral', pairs }))
     ).skip(s('}'))
       .desc('record literal (e.g. { ... })'),
+    ParenGroup: ({ _, Expression }) =>
+      s('(').then(Expression.trim(_)).skip(s(')')),
 
     PrimaryExpr: L => alt( // in terms of operator precedence, "primary expressions"
         // are the smallest units, which are either actual leaf nodes (variables,
         // numberals, string literals) or delimited groups (parenthesized exprs,
         // array literals, record literals, function calls, anonymous functions).
         // They are the operands to the tightest-binding operator
+      L.ParenGroup,
       L.Identifier,
       L.Numeral,
       L.StringLiteral,

@@ -519,8 +519,18 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('record literal not allowed as expression, same as JS x => { x }', () => {
+      test('record literal not allowed as expr w/o parens, same as JS x => { x }', () => {
         assert(!parser.Expression.parse('x => { x }').status)
+        const observed = parser.Expression.tryParse('x => ({ x })')
+        const expected = {
+          type: 'ArrowFunc',
+          params: ['x'],
+          body: {
+            type: 'RecordLiteral',
+            pairs: [{ key: 'x', val: 'x' }],
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
       })
     })
   })
@@ -580,10 +590,64 @@ suite('Parser', () => {
       test('prohibit ambiguous -2**2', () => {
         // see comment in ExponentExpr source code for more about this ambiguity
         assert(!parser.ExponentExpr.parse('-2**2').status)
+
+        const observed1 = parser.Expression.tryParse('(-2)**2')
+        const expected1 = {
+          type: 'BinaryExpr',
+          op: '**',
+          left: {
+            type: 'UnaryExpr',
+            op: '-',
+            arg: '2',
+          },
+          right: '2',
+        }
+        assert.deepStrictEqual(observed1, expected1)
+
+        const observed2 = parser.Expression.tryParse('-(2**2)')
+        const expected2 = {
+          type: 'UnaryExpr',
+          op: '-',
+          arg: {
+            type: 'BinaryExpr',
+            op: '**',
+            left: '2',
+            right: '2',
+          },
+        }
+        assert.deepStrictEqual(observed2, expected2)
       })
       test('prohibit ambiguous 2**3**2', () => {
         // see comment in ExponentExpr source code for more about this ambiguity
         assert(!parser.ExponentExpr.parse('2**3**2').status)
+
+        const observed1 = parser.Expression.tryParse('(2**3)**2')
+        const expected1 = {
+          type: 'BinaryExpr',
+          op: '**',
+          left: {
+            type: 'BinaryExpr',
+            op: '**',
+            left: '2',
+            right: '3',
+          },
+          right: '2',
+        }
+        assert.deepStrictEqual(observed1, expected1)
+
+        const observed2 = parser.Expression.tryParse('2**(3**2)')
+        const expected2 = {
+          type: 'BinaryExpr',
+          op: '**',
+          left: '2',
+          right: {
+            type: 'BinaryExpr',
+            op: '**',
+            left: '3',
+            right: '2',
+          },
+        }
+        assert.deepStrictEqual(observed2, expected2)
       })
     })
 
@@ -630,6 +694,45 @@ suite('Parser', () => {
                 type: 'UnaryExpr',
                 op: '-',
                 arg: '6',
+              },
+            },
+            right: {
+              type: 'BinaryExpr',
+              op: '**',
+              left: '7',
+              right: '8',
+            },
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('okay, PEMDAS', () => {
+        const observed = parser.AddExpr.tryParse('2-3*(4+5)**-6/7**8')
+        const expected = {
+          type: 'BinaryExpr',
+          op: '-',
+          left: '2',
+          right: {
+            type: 'BinaryExpr',
+            op: '/',
+            left: {
+              type: 'BinaryExpr',
+              op: '*',
+              left: '3',
+              right: {
+                type: 'BinaryExpr',
+                op: '**',
+                left: {
+                  type: 'BinaryExpr',
+                  op: '+',
+                  left: '4',
+                  right: '5',
+                },
+                right: {
+                  type: 'UnaryExpr',
+                  op: '-',
+                  arg: '6',
+                },
               },
             },
             right: {
