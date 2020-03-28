@@ -14,73 +14,80 @@ suite('Parser', () => {
   suite('primary exprs', () => {
     suite('identifiers', () => {
       test('basic this_is_valid', () => {
-        const observed = parser.PrimaryExpr.tryParse('this_is_valid')
+        const observed = parser.Expression.tryParse('this_is_valid')
         const expected = 'this_is_valid'
-        assert.deepStrictEqual(observed, expected)
+        assert.strictEqual(observed, expected)
       })
       test('invalid _foo, foo__bar, foo_, $foo', () => {
-        assert(!parser.PrimaryExpr.parse('_foo').status)
-        assert(!parser.PrimaryExpr.parse('foo__bar').status)
-        assert(!parser.PrimaryExpr.parse('foo_').status)
-        assert(!parser.PrimaryExpr.parse('$foo').status)
+        assert(!parser.Expression.parse('_foo').status)
+        assert(!parser.Expression.parse('foo__bar').status)
+        assert(!parser.Expression.parse('foo_').status)
+        assert(!parser.Expression.parse('$foo').status)
       })
+    })
+    suite('numerals', () => {
+      test('basic nonnegative integers', () => {
+        assert.strictEqual(parser.Expression.tryParse('0'), '0')
+        assert.strictEqual(parser.Expression.tryParse('123'), '123')
+      })
+      // TODO: decimals, exponential notation, hexadecimals?
     })
     suite('string literals', () => {
       test('basic "asdf"', () => {
-        const observed = parser.PrimaryExpr.tryParse('"asdf"')
+        const observed = parser.Expression.tryParse('"asdf"')
         const expected = '"asdf"'
         assert.deepStrictEqual(observed, expected)
       })
       test("basic 'asdf'", () => {
-        const observed = parser.PrimaryExpr.tryParse("'asdf'")
+        const observed = parser.Expression.tryParse("'asdf'")
         const expected = "'asdf'"
         assert.deepStrictEqual(observed, expected)
       })
       test('basic ""', () => {
-        const observed = parser.PrimaryExpr.tryParse('""')
+        const observed = parser.Expression.tryParse('""')
         const expected = '""'
         assert.deepStrictEqual(observed, expected)
       })
       test("basic ''", () => {
-        const observed = parser.PrimaryExpr.tryParse("''")
+        const observed = parser.Expression.tryParse("''")
         const expected = "''"
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping double-quotes', () => {
-        const observed = parser.PrimaryExpr.tryParse('"you could call it \\"weird\\", I guess"')
+        const observed = parser.Expression.tryParse('"you could call it \\"weird\\", I guess"')
         const expected = '"you could call it \\"weird\\", I guess"'
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping single-quotes', () => {
-        const observed = parser.PrimaryExpr.tryParse("'you could call it \\'weird\\', I guess'")
+        const observed = parser.Expression.tryParse("'you could call it \\'weird\\', I guess'")
         const expected = "'you could call it \\'weird\\', I guess'"
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline double-quotes', () => {
-        const observed = parser.PrimaryExpr.tryParse('"first line\nsecond line"')
+        const observed = parser.Expression.tryParse('"first line\nsecond line"')
         const expected = '"first line\nsecond line"'
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline single-quotes', () => {
-        const observed = parser.PrimaryExpr.tryParse("'first line\nsecond line'")
+        const observed = parser.Expression.tryParse("'first line\nsecond line'")
         const expected = "'first line\nsecond line'"
         assert.deepStrictEqual(observed, expected)
       })
       test('indented multiline double-quotes', () => {
         const indentedParser = parserAtIndent('  ')
-        const observed = indentedParser.PrimaryExpr.tryParse('"first\n  second\n    third\n  fourth"')
+        const observed = indentedParser.Expression.tryParse('"first\n  second\n    third\n  fourth"')
         const expected = '"first\nsecond\n  third\nfourth"'
         assert.deepStrictEqual(observed, expected)
       })
       test('indented multiline single-quotes', () => {
         const indentedParser = parserAtIndent('  ')
-        const observed = indentedParser.PrimaryExpr.tryParse("'first\n  second\n    third\n  fourth'")
+        const observed = indentedParser.Expression.tryParse("'first\n  second\n    third\n  fourth'")
         const expected = "'first\nsecond\n  third\nfourth'"
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline string requires indent', () => {
         const indentedParser = parserAtIndent('    ')
-        const result = indentedParser.PrimaryExpr.parse('"first\n   second"')
+        const result = indentedParser.Expression.parse('"first\n   second"')
         assert(!result.status)
         assert.strictEqual((result as Failure).index.offset, 10)
       })
@@ -110,15 +117,15 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('mismatched quotes', () => {
-        assert(!parser.PrimaryExpr.parse('"text').status)
-        assert(!parser.PrimaryExpr.parse('"text \\"something" else"').status)
-        assert(!parser.PrimaryExpr.parse("'text").status)
-        assert(!parser.PrimaryExpr.parse("'text \\'something' else'").status)
+        assert(!parser.Expression.parse('"text').status)
+        assert(!parser.Expression.parse('"text \\"something" else"').status)
+        assert(!parser.Expression.parse("'text").status)
+        assert(!parser.Expression.parse("'text \\'something' else'").status)
       })
     })
     suite('array literals', () => {
       test('basic [1,2,3]', () => {
-        const observed = parser.PrimaryExpr.tryParse('[ 1, 2, 3 ]')
+        const observed = parser.Expression.tryParse('[ 1, 2, 3 ]')
         const expected = {
           type: 'ArrayLiteral',
           exprs: [ '1', '2', '3' ],
@@ -126,7 +133,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('basic empty []', () => {
-        const observed = parser.PrimaryExpr.tryParse('[]')
+        const observed = parser.Expression.tryParse('[]')
         const expected = {
           type: 'ArrayLiteral',
           exprs: [],
@@ -134,7 +141,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('trailing comma [1,2,]', () => {
-        const observed = parser.PrimaryExpr.tryParse('[ 1, 2, ]')
+        const observed = parser.Expression.tryParse('[ 1, 2, ]')
         const expected = {
           type: 'ArrayLiteral',
           exprs: [ '1', '2' ],
@@ -142,7 +149,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('newlines [1,2,]', () => {
-        const observed = parser.PrimaryExpr.tryParse(`[
+        const observed = parser.Expression.tryParse(`[
           1,
           2,
         ]`)
@@ -153,7 +160,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('comma-first', () => {
-        const observed = parser.PrimaryExpr.tryParse(
+        const observed = parser.Expression.tryParse(
           `[ 1
            , 2
            , 3
@@ -165,28 +172,28 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('invalid (holes) [1,,2]', () => {
-        assert(!parser.PrimaryExpr.parse('[ 1, , 2 ]').status)
-        assert(!parser.PrimaryExpr.parse('[ 1, 2,, ]').status)
+        assert(!parser.Expression.parse('[ 1, , 2 ]').status)
+        assert(!parser.Expression.parse('[ 1, 2,, ]').status)
       })
       test('invalid single comma [,]', () => {
-        assert(!parser.PrimaryExpr.parse('[,]').status)
-        assert(!parser.PrimaryExpr.parse('[ , ]').status)
+        assert(!parser.Expression.parse('[,]').status)
+        assert(!parser.Expression.parse('[ , ]').status)
       })
       test('invalid (missing comma) [1 2]', () => {
-        assert(!parser.PrimaryExpr.parse('[1 2]').status)
-        assert(!parser.PrimaryExpr.parse('[[1] 2]').status)
-        assert(!parser.PrimaryExpr.parse('[1 [2]]').status)
+        assert(!parser.Expression.parse('[1 2]').status)
+        assert(!parser.Expression.parse('[[1] 2]').status)
+        assert(!parser.Expression.parse('[1 [2]]').status)
       })
       test('invalid mismatched brackets', () => {
-        assert(!parser.PrimaryExpr.parse('[1, 2').status)
-        assert(!parser.PrimaryExpr.parse('1, 2]').status)
-        assert(!parser.PrimaryExpr.parse('[[1, 2]').status)
-        assert(!parser.PrimaryExpr.parse('[[1], 2').status)
+        assert(!parser.Expression.parse('[1, 2').status)
+        assert(!parser.Expression.parse('1, 2]').status)
+        assert(!parser.Expression.parse('[[1, 2]').status)
+        assert(!parser.Expression.parse('[[1], 2').status)
       })
     })
     suite('record literals', () => {
       test('basic {a: 1, b:2}', () => {
-        const observed = parser.PrimaryExpr.tryParse('{a: 1, b: 2}')
+        const observed = parser.Expression.tryParse('{a: 1, b: 2}')
         const expected = {
           type: 'RecordLiteral',
           pairs: [
@@ -197,7 +204,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('trailing comma {a: 1, b:2,}', () => {
-        const observed = parser.PrimaryExpr.tryParse('{a: 1, b: 2,}')
+        const observed = parser.Expression.tryParse('{a: 1, b: 2,}')
         const expected = {
           type: 'RecordLiteral',
           pairs: [
@@ -208,7 +215,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('empty record {}', () => {
-        const observed = parser.PrimaryExpr.tryParse('{}')
+        const observed = parser.Expression.tryParse('{}')
         const expected = {
           type: 'RecordLiteral',
           pairs: [],
@@ -216,7 +223,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('record field name punning {a}', () => {
-        const observed = parser.PrimaryExpr.tryParse('{a}')
+        const observed = parser.Expression.tryParse('{a}')
         const expected = {
           type: 'RecordLiteral',
           pairs: [{ key: 'a', val: 'a' }],
@@ -224,7 +231,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('mixed obj { a: 1, b, c, }', () => {
-        const observed = parser.PrimaryExpr.tryParse('{ a: 1, b, c, }')
+        const observed = parser.Expression.tryParse('{ a: 1, b, c, }')
         const expected = {
           type: 'RecordLiteral',
           pairs: [
@@ -236,10 +243,10 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('invalid without comma {a b}', () => {
-        assert(!parser.PrimaryExpr.parse('{a b}').status)
+        assert(!parser.Expression.parse('{a b}').status)
       })
       test('allow expressions in values { a: 1+1, ... }', () => {
-        const observed = parser.PrimaryExpr.tryParse(`{
+        const observed = parser.Expression.tryParse(`{
           a: 1+1,
           b: x && y ? z : t ? w : u ? v + 2**-2 : 3,
           c: { i: 0, j: 1, k: 2 },
@@ -322,7 +329,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('comma-first', () => {
-        const observed = parser.PrimaryExpr.tryParse(
+        const observed = parser.Expression.tryParse(
           `{ a: 1
            , b: 2
            , c: 3
@@ -338,17 +345,17 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('field names must be valid identifiers', () => {
-        assert(!parser.PrimaryExpr.parse('{ invalid__ident: 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ _invalid: 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ $invalid: 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ "not an identifier at all": 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ 5: 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ [1+1]: 1 }').status)
-        assert(!parser.PrimaryExpr.parse('{ method() { Return 10 } }').status)
+        assert(!parser.Expression.parse('{ invalid__ident: 1 }').status)
+        assert(!parser.Expression.parse('{ _invalid: 1 }').status)
+        assert(!parser.Expression.parse('{ $invalid: 1 }').status)
+        assert(!parser.Expression.parse('{ "not an identifier at all": 1 }').status)
+        assert(!parser.Expression.parse('{ 5: 1 }').status)
+        assert(!parser.Expression.parse('{ [1+1]: 1 }').status)
+        assert(!parser.Expression.parse('{ method() { Return 10 } }').status)
       })
       test('invalid single comma {,}', () => {
-        assert(!parser.PrimaryExpr.parse('{,}').status)
-        assert(!parser.PrimaryExpr.parse('{ , }').status)
+        assert(!parser.Expression.parse('{,}').status)
+        assert(!parser.Expression.parse('{ , }').status)
       })
     })
     suite('ArrowFunc', () => {
@@ -538,7 +545,7 @@ suite('Parser', () => {
   suite('expression operator precedence stack', () => {
     suite('UnaryExpr', () => {
       test('basic -2', () => {
-        const observed = parser.UnaryExpr.tryParse('-2')
+        const observed = parser.Expression.tryParse('-2')
         const expected = {
           type: 'UnaryExpr',
           op: '-',
@@ -546,16 +553,11 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('fallthru to PrimaryExpr', () => {
-        const observed = parser.UnaryExpr.tryParse('2')
-        const expected = '2'
-        assert.deepStrictEqual(observed, expected)
-      })
     })
 
     suite('ExponentExpr', () => {
       test('basic 2**3', () => {
-        const observed = parser.ExponentExpr.tryParse('2**3')
+        const observed = parser.Expression.tryParse('2**3')
         const expected = {
           type: 'BinaryExpr',
           op: '**',
@@ -565,7 +567,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('un-op exponent 2**-3', () => {
-        const observed = parser.ExponentExpr.tryParse('2**-3')
+        const observed = parser.Expression.tryParse('2**-3')
         const expected = {
           type: 'BinaryExpr',
           op: '**',
@@ -578,18 +580,9 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('fallthru to UnaryExpr', () => {
-        const observed = parser.ExponentExpr.tryParse('-2')
-        const expected = {
-          type: 'UnaryExpr',
-          op: '-',
-          arg: '2',
-        }
-        assert.deepStrictEqual(observed, expected)
-      })
       test('prohibit ambiguous -2**2', () => {
         // see comment in ExponentExpr source code for more about this ambiguity
-        assert(!parser.ExponentExpr.parse('-2**2').status)
+        assert(!parser.Expression.parse('-2**2').status)
 
         const observed1 = parser.Expression.tryParse('(-2)**2')
         const expected1 = {
@@ -619,7 +612,7 @@ suite('Parser', () => {
       })
       test('prohibit ambiguous 2**3**2', () => {
         // see comment in ExponentExpr source code for more about this ambiguity
-        assert(!parser.ExponentExpr.parse('2**3**2').status)
+        assert(!parser.Expression.parse('2**3**2').status)
 
         const observed1 = parser.Expression.tryParse('(2**3)**2')
         const expected1 = {
@@ -653,7 +646,7 @@ suite('Parser', () => {
 
     suite('arithmetic precedence', () => {
       test('MultExpr is left-associative', () => {
-        const observed = parser.MultExpr.tryParse('2/3/4')
+        const observed = parser.Expression.tryParse('2/3/4')
         const expected = {
           type: 'BinaryExpr',
           op: '/',
@@ -668,7 +661,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('the MDAS (in PEMDAS)', () => {
-        const observed = parser.AddExpr.tryParse('2-3*4+5**-6/7**8')
+        const observed = parser.Expression.tryParse('2-3*4+5**-6/7**8')
         const expected = {
           type: 'BinaryExpr',
           op: '+',
@@ -707,7 +700,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('okay, PEMDAS', () => {
-        const observed = parser.AddExpr.tryParse('2-3*(4+5)**-6/7**8')
+        const observed = parser.Expression.tryParse('2-3*(4+5)**-6/7**8')
         const expected = {
           type: 'BinaryExpr',
           op: '-',
@@ -745,25 +738,11 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('fallthru to UnaryExpr', () => {
-        const observed = parser.AddExpr.tryParse('-2')
-        const expected = {
-          type: 'UnaryExpr',
-          op: '-',
-          arg: '2',
-        }
-        assert.deepStrictEqual(observed, expected)
-      })
-      test('fallthru to PrimaryExpr', () => {
-        const observed = parser.AddExpr.tryParse('2')
-        const expected = '2'
-        assert.deepStrictEqual(observed, expected)
-      })
     })
 
     suite('CompareExpr', () => {
       test('basic a != b', () => {
-        const observed = parser.CompareExpr.tryParse('a != b')
+        const observed = parser.Expression.tryParse('a != b')
         const expected = {
           type: 'InequalityExpr',
           left: 'a',
@@ -772,14 +751,14 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('no chaining a != b != c', () => {
-        assert(!parser.CompareExpr.parse('a != b != c').status)
+        assert(!parser.Expression.parse('a != b != c').status)
       })
       test('"!=" is mutually exclusive with other comparisons', () => {
-        assert(!parser.CompareExpr.parse('a != b < c').status)
-        assert(!parser.CompareExpr.parse('a < b != c').status)
+        assert(!parser.Expression.parse('a != b < c').status)
+        assert(!parser.Expression.parse('a < b != c').status)
       })
       test('chaining', () => {
-        const observed = parser.CompareExpr.tryParse('a < b == c <= d < e')
+        const observed = parser.Expression.tryParse('a < b == c <= d < e')
         const expected = {
           type: 'CompareChainExpr',
           chain: [
@@ -812,8 +791,8 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('improper chaining a < b > c', () => {
-        assert(!parser.CompareExpr.parse('a < b > c').status)
-        const observed = parser.CompareExpr.tryParse('a < (b > c)')
+        assert(!parser.Expression.parse('a < b > c').status)
+        const observed = parser.Expression.tryParse('a < (b > c)')
         const expected = {
           type: 'BinaryExpr',
           op: '<',
@@ -828,7 +807,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('chaining starting with equals a == b < c', () => {
-        const observed = parser.OrExpr.tryParse('a == b < c')
+        const observed = parser.Expression.tryParse('a == b < c')
         const expected = {
           type: 'CompareChainExpr',
           chain: [
@@ -849,7 +828,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('chaining starting with equals a == b > c', () => {
-        const observed = parser.OrExpr.tryParse('a == b > c')
+        const observed = parser.Expression.tryParse('a == b > c')
         const expected = {
           type: 'CompareChainExpr',
           chain: [
@@ -869,16 +848,11 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
       })
-      test('fallthru to PrimaryExpr', () => {
-        const observed = parser.CompareExpr.tryParse('2')
-        const expected = '2'
-        assert.deepStrictEqual(observed, expected)
-      })
     })
 
     suite('logical boolean operators && and ||', () => {
       test('&& conventionally has higher precedence than ||', () => {
-        const observed = parser.OrExpr.tryParse('a && b || c && d')
+        const observed = parser.Expression.tryParse('a && b || c && d')
         const expected = {
           type: 'BinaryExpr',
           op: '||',
@@ -898,7 +872,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('logical and arithmetic precedence', () => {
-        const observed = parser.OrExpr.tryParse('a && b == c > d && e')
+        const observed = parser.Expression.tryParse('a && b == c > d && e')
         const expected = {
           type: 'BinaryExpr',
           op: '&&',
@@ -932,7 +906,7 @@ suite('Parser', () => {
 
     suite('CondExpr', () => {
       test('basic a ? b : c', () => {
-        const observed = parser.CondExpr.tryParse('a ? b : c')
+        const observed = parser.Expression.tryParse('a ? b : c')
         const expected = {
           type: 'CondExpr',
           test: 'a',
@@ -942,7 +916,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('precedence with comparisons', () => {
-        const observed = parser.CondExpr.tryParse('a == b && c < d < e ? f + 2 : g**3*4')
+        const observed = parser.Expression.tryParse('a == b && c < d < e ? f + 2 : g**3*4')
         const expected = {
           type: 'CondExpr',
           test: {
@@ -993,7 +967,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('nested conditionals', () => {
-        const observed = parser.CondExpr.tryParse('a ? b ? c : d ? e : f : g ? h : i')
+        const observed = parser.Expression.tryParse('a ? b ? c : d ? e : f : g ? h : i')
         const expected = {
           type: 'CondExpr',
           test: 'a',
@@ -1018,11 +992,11 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('mis-nested conditionals', () => {
-        assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f ? g : h').status)
-        assert(!parser.CondExpr.parse('a ? b ? c : d ? e : f : g ? h : i : j').status)
+        assert(!parser.Expression.parse('a ? b ? c : d ? e : f ? g : h').status)
+        assert(!parser.Expression.parse('a ? b ? c : d ? e : f : g ? h : i : j').status)
       })
       test('if-elif-elif-else, postfix', () => {
-        const observed = parser.CondExpr.tryParse(
+        const observed = parser.Expression.tryParse(
           `a ? b :
             c ? d :
             e ? f :
@@ -1046,7 +1020,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('if-elif-elif-else, prefix', () => {
-        const observed = parser.CondExpr.tryParse(
+        const observed = parser.Expression.tryParse(
           `a ? b
           : c ? d
           : e ? f
@@ -1075,7 +1049,7 @@ suite('Parser', () => {
   suite('Statements', () => {
     suite('LetStmt', () => {
       test('basic Let a = 1', () => {
-        const observed = parser.LetStmt.tryParse('Let a = 1')
+        const observed = parser.Statement.tryParse('Let a = 1')
         const expected = {
           type: 'LetStmt',
           varName: 'a',
@@ -1084,7 +1058,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('bigger expression', () => {
-        const observed = parser.LetStmt.tryParse('Let y = 2*x**3*4')
+        const observed = parser.Statement.tryParse('Let y = 2*x**3*4')
         const expected = {
           type: 'LetStmt',
           varName: 'y',
@@ -1108,7 +1082,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('less whitespace Let x=1+2', () => {
-        const observed = parser.LetStmt.tryParse('Let x=1+2')
+        const observed = parser.Statement.tryParse('Let x=1+2')
         const expected = {
           type: 'LetStmt',
           varName: 'x',
@@ -1122,7 +1096,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('missing whitespace Letx = 1', () => {
-        assert(!parser.LetStmt.parse('Letx = 1').status)
+        assert(!parser.Statement.parse('Letx = 1').status)
       })
     })
 
