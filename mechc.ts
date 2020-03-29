@@ -63,7 +63,7 @@ export function parserAtIndent(indent: string) {
   const Numeral = r(/\d+/).desc('numeral (e.g. 123)') // TODO decimals, exponential notation
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`)
-    .mark().chain(({value: str, start, end}) => {
+    .chain(str => {
       let i = 0, errOffset = 0, errMsg = ''
       const dedented = str.replace(/\n */g, prefix => {
         i += 1
@@ -190,8 +190,10 @@ export function parserAtIndent(indent: string) {
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   )
   const CondExpr = alt(
-    seqMap(OrExpr.skip(s('?').trim(_)), Expression.skip(s(':').trim(_)), Expression,
-      (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })),
+    seqMap(
+      OrExpr.skip(s('?').trim(_)), Expression.skip(s(':').trim(_)), Expression,
+      (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })
+    ),
     OrExpr,
   )
   const ArrowFunc = lazy(() => seqMap(
@@ -251,10 +253,12 @@ export function parserAtIndent(indent: string) {
       + `>${indent.length} spaces`)
   }).trim(_EOL)
 
-  const StatementBraceBlock = s('{').then(alt(
-    Statement.sepBy1(s(';').trim(_nonNL)).trim(_nonNL),
-    StatementIndentBlock.skip(s(indent)),
-  )).skip(s('}'))
+  const StatementBraceBlock = s('{').then(
+    alt(
+      Statement.sepBy1(s(';').trim(_nonNL)).trim(_nonNL),
+      StatementIndentBlock.skip(s(indent)),
+    )
+  ).skip(s('}'))
 
 
   //
