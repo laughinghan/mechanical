@@ -7,7 +7,6 @@ import {
   alt,
   seq,
   seqMap,
-  seqObj,
   lookahead,
   string as s,
   regex as r
@@ -33,33 +32,36 @@ function sepByOptTrailing<R>(separator: Parser<unknown>) {
   )
 }
 
+// (some of the) Lexical Grammar
+
+// Whitespace
+const _ = r(/[ \n]*/)  // optional whitespace
+const __ = r(/[ \n]+/) // required whitespace
+const _nonNL = r(/ */) // whitespace, no newlines
+const _EOL = r(/ *(?:\/\/[^\n]*)?\n/).desc('end-of-line') // end-of-line,
+  // including optional whitespace and line comment
+
+// Note that Tabs are banned, as are exotic whitespace \a\b\v\f\r, except
+// in string literals. Just think of banned whitespace like control
+// characters and non-printing characters.
+
+// By convention, rules all start and end on non-whitespace, and expect
+// the parent rule to deal with surrounding whitespace, EXCEPT that
+// StatementIndentBlock expects leading indentation (so it must only be
+// invoked immediately after a newline)
+
+
+const Identifier = r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i) // TODO non-English letters etc
+  .desc('identifier (e.g. example_identifier)')
+
+
 export function parserAtIndent(indent: string) {
-  // Whitespace
-  const _ = r(/[ \n]*/)  // optional whitespace
-  const __ = r(/[ \n]+/) // required whitespace
-  const _nonNL = r(/ */) // whitespace, no newlines
-  const _EOL = r(/ *(?:\/\/[^\n]*)?\n/).desc('end-of-line') // end-of-line,
-    // including optional whitespace and line comment
-
-  // Note that Tabs are banned, as are exotic whitespace \a\b\v\f\r, except
-  // in string literals. Just think of banned whitespace like control
-  // characters and non-printing characters.
-
-  // By convention, rules all start and end on non-whitespace, and expect
-  // the parent rule to deal with surrounding whitespace, EXCEPT
-  // StatementIndentBlock, which expects leading indentation, and consumes
-  // a trailing newline.
-
-
-
   //
   // Expression Grammar (based on JS)
   //   https://tc39.es/ecma262/#sec-ecmascript-language-expressions
   //
   const Expression: Parser<any> = lazy(() => alt(ArrowFunc, CondExpr))
 
-  const Identifier = r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i) // TODO non-English letters etc
-    .desc('identifier (e.g. example_identifier)')
   const Numeral = r(/\d+/).desc('numeral (e.g. 123)') // TODO decimals, exponential notation
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`)
@@ -255,32 +257,39 @@ export function parserAtIndent(indent: string) {
     return fail(`Statement block improperly indented\n`
       + `Only indented ${newIndent.length} spaces, needs to be indented `
       + `>${indent.length} spaces`)
-  }).trim(_EOL)
+  })
 
   const StatementBraceBlock = s('{').then(
     alt(
       Statement.sepBy1(s(';').trim(_nonNL)).trim(_nonNL),
-      StatementIndentBlock.skip(s(indent)),
+      StatementIndentBlock.trim(_EOL).skip(s(indent)),
     )
   ).skip(s('}'))
 
-
-  //
-  // Top-Level Declarations
-  // all exported
-  //
-  return {
-    Expression,
-    Statement,
-    StateDecl: seqObj<{var_name: string}, 'var_name'>(
-      s('State'),
-      __,
-      ['var_name', Identifier],
-      _,
-      s('='),
-      _,
-    ),
-  }
+  return { Expression, Statement, StatementIndentBlock }
 }
 
 export const parser = parserAtIndent('')
+
+
+//
+// Top-Level Declarations
+// all exported
+//
+const StateDecl = seqMap(
+  s('State').then(__).then(Identifier), s('=').trim(_).then(parser.Expression),
+  (varName, expr) => ({ type: 'StateDecl', varName, expr })
+)
+const WhenDecl = seqMap(
+  s('When').then(__).then(parser.Expression),
+  alt(s('with').trim(__).then(Identifier), succeed(null))
+  .skip(_).skip(s(':')).skip(_EOL),
+  parser.StatementIndentBlock,
+  (event, varName, body) => ({ type: 'WhenDecl', event, varName, body })
+)
+export const Declaration = alt(StateDecl, WhenDecl)
+
+
+export const ProgramParser =
+  s('Mechanical v0.0.1\n').then(Declaration.or(_nonNL.result(null)).sepBy(_EOL))
+  .map(decls => decls.filter(Boolean))

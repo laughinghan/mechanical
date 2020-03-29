@@ -2,15 +2,9 @@ import 'mocha'
 import assert from 'assert'
 import { Failure } from 'parsimmon'
 
-import { parserAtIndent, parser } from './mechc'
+import { parserAtIndent, parser, Declaration, ProgramParser } from './mechc'
 
 suite('Parser', () => {
-  test('StateDecl', () => {
-    const observed = parser.StateDecl.tryParse('State x = ')
-    const expected = { var_name: 'x' }
-    assert.deepStrictEqual(observed, expected)
-  })
-
   suite('primary exprs', () => {
     suite('identifiers', () => {
       test('basic this_is_valid', () => {
@@ -1224,5 +1218,116 @@ suite('Parser', () => {
         assert.strictEqual((overIndented as Failure).index.offset, 46)
       })
     })
+  })
+
+  suite('Top-Level Declarations', () => {
+    suite('StateDecl', () => {
+      test('basic State x = 1+2', () => {
+        const observed = Declaration.tryParse('State x = 1+2')
+        const expected = {
+          type: 'StateDecl',
+          varName: 'x',
+          expr: {
+            type: 'BinaryExpr',
+            op: '+',
+            left: '1',
+            right: '2',
+          },
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+    })
+
+    suite('WhenDecl', () => {
+      test('basic no param', () => {
+        const observed = Declaration.tryParse(
+            'When btnClick:\n'
+          + '    Change x to x+1'
+        )
+        const expected = {
+          type: 'WhenDecl',
+          event: 'btnClick',
+          varName: null,
+          body: [{
+            type: 'ChangeStmt',
+            varName: 'x',
+            expr: {
+              type: 'BinaryExpr',
+              op: '+',
+              left: 'x',
+              right: '1',
+            }
+          }]
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic with param', () => {
+        const observed = Declaration.tryParse(
+            'When btnClick with context:\n'
+          + '    Change x to context'
+        )
+        const expected = {
+          type: 'WhenDecl',
+          event: 'btnClick',
+          varName: 'context',
+          body: [{
+            type: 'ChangeStmt',
+            varName: 'x',
+            expr: 'context'
+          }]
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+    })
+  })
+})
+
+suite('ProgramParser', () => {
+  test('basic program', () => {
+    const observed = ProgramParser.tryParse(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + 'State counter = 0\n'
+      + '\n'
+      + 'When btnClick:\n'
+      + '    Change counter to counter+1\n'
+      + '\n'
+    )
+    const expected = [
+      { type: 'StateDecl', varName: 'counter', expr: '0' },
+      {
+        type: 'WhenDecl',
+        event: 'btnClick',
+        varName: null,
+        body: [{
+          type: 'ChangeStmt',
+          varName: 'counter',
+          expr: { type: 'BinaryExpr', op: '+', left: 'counter', right: '1' },
+        }]
+      }
+    ]
+    assert.deepStrictEqual(observed, expected)
+  })
+  test('basic program, less whitespace', () => {
+    const observed = ProgramParser.tryParse(
+        'Mechanical v0.0.1\n'
+      + 'State counter = 0\n'
+      + 'When btnClick:\n'
+      + '    Change counter to counter+1'
+    )
+    const expected = [
+      { type: 'StateDecl', varName: 'counter', expr: '0' },
+      {
+        type: 'WhenDecl',
+        event: 'btnClick',
+        varName: null,
+        body: [{
+          type: 'ChangeStmt',
+          varName: 'counter',
+          expr: { type: 'BinaryExpr', op: '+', left: 'counter', right: '1' },
+        }]
+      }
+    ]
+    assert.deepStrictEqual(observed, expected)
   })
 })
