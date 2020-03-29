@@ -221,14 +221,18 @@ export function parserAtIndent(indent: string) {
   // Statements
   // allowed in the body of an event handler declaration, or in a cmd {} block
   //
+  const ReturnStmt = s('Return').then(__).then(Expression)
+    .map(expr => ({ type: 'ReturnStmt', expr }))
   const LetStmt = seqMap(
     s('Let').then(__).then(Identifier), s('=').trim(_).then(Expression),
     (varName, expr) => ({ type: 'LetStmt', varName, expr }),
   )
-  const ReturnStmt = s('Return').then(__).then(Expression)
-    .map(expr => ({ type: 'ReturnStmt', expr }))
+  const ChangeStmt = seqMap(
+    s('Change').then(__).then(Identifier), s('to').trim(_).then(Expression),
+    (varName, expr) => ({ type: 'ChangeStmt', varName, expr })
+  )
 
-  const Statement = alt(LetStmt, ReturnStmt)
+  const Statement = alt(ReturnStmt, LetStmt, ChangeStmt)
 
   const StatementIndentBlock = _nonNL.chain(newIndent => {
     if (newIndent.length > indent.length) {
