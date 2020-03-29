@@ -198,7 +198,7 @@ export function parserAtIndent(indent: string) {
   )
   const ArrowFunc = lazy(() => seqMap(
     alt(
-      Identifier.map(Array),
+      Identifier.map(param => [param]),
       s('(').then(Identifier.sepBy1(s(',').trim(_)).trim(_)).skip(s(')')),
     )
     .skip(s('=>').trim(_)),
@@ -232,7 +232,7 @@ export function parserAtIndent(indent: string) {
 
   const StatementIndentBlock = _nonNL.chain(newIndent => {
     if (newIndent.length > indent.length) {
-      const { Statement } = parserAtIndent(newIndent)
+      const { Statement } = parserAtIndent(newIndent) as any
       return Statement.sepBy1(_EOL.then(_nonNL.chain(nextIndent => {
         if (nextIndent.length === newIndent.length) return succeed('')
         return fail(`Statement improperly indented\n`
