@@ -1094,6 +1094,157 @@ suite('Parser', () => {
       })
     })
 
+    suite('StatementIndentBlock', () => {
+      test('basic indent block', () => {
+        const observed = Declaration.tryParse(
+            'When evt:\n'
+          + '    Change x to x+1'
+        )
+        const expected = {
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [{
+            type: 'ChangeStmt',
+            varName: 'x',
+            expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+          }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('comments in indent block', () => {
+        const observed = Declaration.tryParse(
+            'When evt:\n'
+          + '    // increment counter\n'
+          + '    Change x to x+1\n'
+          + '    // also the other counter\n'
+          + '    Change y to y+2'
+        )
+        const expected = {
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [
+            {
+              type: 'ChangeStmt',
+              varName: 'x',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ChangeStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '2' },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+
+        const underIndentedObserved = Declaration.tryParse(
+            'When evt:\n'
+          + '  // comment\n'
+          + '    Change x to x+1\n'
+          + '  // comment\n'
+          + '    Change y to y+2'
+        )
+        const underIndentedExpected = {
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [
+            {
+              type: 'ChangeStmt',
+              varName: 'x',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ChangeStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '2' },
+            }
+          ],
+        }
+        assert.deepStrictEqual(underIndentedObserved, underIndentedExpected)
+
+        const overIndentedObserved = Declaration.tryParse(
+            'When evt:\n'
+          + '      // comment\n'
+          + '    Change x to x+1\n'
+          + '      // comment\n'
+          + '    Change y to y+2'
+        )
+        const overIndentedExpected = {
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [
+            {
+              type: 'ChangeStmt',
+              varName: 'x',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ChangeStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '2' },
+            }
+          ],
+        }
+        assert.deepStrictEqual(overIndentedObserved, overIndentedExpected)
+      })
+      test('trailing comments allowed in program', () => {
+        // trailing comments aren't allowed in the indent block, but we want to
+        // ensure they're still allowed in the program
+        const observed = ProgramParser.tryParse(
+            'Mechanical v0.0.1\n'
+          + '\n'
+          + 'When evt:\n'
+          + '    // increment counter\n'
+          + '    Change x to x+1\n'
+          + '    // done!\n'
+        )
+        const expected = [{
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [{
+            type: 'ChangeStmt',
+            varName: 'x',
+            expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+          }],
+        }]
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('blank lines in indent block', () => {
+        const observed = Declaration.tryParse(
+            'When evt:\n'
+          + '\n' // not indented
+          + '  \n' // indented wrong
+          + '\n' // no indented again
+          + '    Change x to x+1\n' // actual indent
+          + '  \n' // another blank line indented wrong
+          + '    Change y to y+2'
+        )
+        const expected = {
+          type: 'WhenDecl',
+          event: 'evt',
+          varName: null,
+          body: [
+            {
+              type: 'ChangeStmt',
+              varName: 'x',
+              expr: { type: 'BinaryExpr', op: '+', left: 'x', right: '1' },
+            },
+            {
+              type: 'ChangeStmt',
+              varName: 'y',
+              expr: { type: 'BinaryExpr', op: '+', left: 'y', right: '2' },
+            },
+          ],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+    })
+
     suite('StatementBraceBlock', () => {
       test('nested arrow function statement blocks', () => {
         const indentedParser = parserAtIndent('    ')
@@ -1329,5 +1480,80 @@ suite('ProgramParser', () => {
       }
     ]
     assert.deepStrictEqual(observed, expected)
+  })
+  test('basic program with comments', () => {
+    const observed = ProgramParser.tryParse(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + '// count how many times button was clicked\n'
+      + 'State counter = 0\n'
+      + '\n'
+      + 'When btnClick:\n'
+      + '    // when button is clicked, increment counter\n'
+      + '    Change counter to counter+1\n'
+      + '\n'
+    )
+    const expected = [
+      { type: 'StateDecl', varName: 'counter', expr: '0' },
+      {
+        type: 'WhenDecl',
+        event: 'btnClick',
+        varName: null,
+        body: [{
+          type: 'ChangeStmt',
+          varName: 'counter',
+          expr: { type: 'BinaryExpr', op: '+', left: 'counter', right: '1' },
+        }]
+      }
+    ]
+    assert.deepStrictEqual(observed, expected)
+  })
+  test('basic program with nonempty blank lines', () => {
+    const observed = ProgramParser.tryParse(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + 'State counter = 0\n'
+      + '  \n'
+      + 'When btnClick:\n'
+      + '              \n'
+      + '    Change counter to counter+1\n'
+      + '\n'
+    )
+    const expected = [
+      { type: 'StateDecl', varName: 'counter', expr: '0' },
+      {
+        type: 'WhenDecl',
+        event: 'btnClick',
+        varName: null,
+        body: [{
+          type: 'ChangeStmt',
+          varName: 'counter',
+          expr: { type: 'BinaryExpr', op: '+', left: 'counter', right: '1' },
+        }]
+      }
+    ]
+    assert.deepStrictEqual(observed, expected)
+  })
+  test('Declarations cannot be indented', () => {
+    const result1 = ProgramParser.parse(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + '  State x = 1\n'
+      + '\n'
+    )
+    assert(!result1.status)
+    assert.strictEqual((result1 as Failure).index.offset, 21)
+
+    const result2 = ProgramParser.parse(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + 'State x = 1\n'
+      + '  \n'
+      + '  When btnClick:\n'
+      + '    Change x to x+1\n'
+      + '\n'
+    )
+    assert(!result2.status)
+    assert.strictEqual((result2 as Failure).index.offset, 36)
   })
 })

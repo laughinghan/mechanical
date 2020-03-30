@@ -9,7 +9,7 @@ import {
   seqMap,
   lookahead,
   string as s,
-  regex as r
+  regex as r,
 } from 'parsimmon'
 
 // who says you can't do left-recursion in a top-down parser? Come at me!
@@ -236,10 +236,10 @@ export function parserAtIndent(indent: string) {
 
   const Statement = alt(ReturnStmt, LetStmt, ChangeStmt)
 
-  const StatementIndentBlock = _nonNL.chain(newIndent => {
+  const StatementIndentBlock = _EOL.many().then(_nonNL).chain(newIndent => {
     if (newIndent.length > indent.length) {
-      const { Statement } = parserAtIndent(newIndent) as any
-      return Statement.sepBy1(_EOL.then(_nonNL.chain(nextIndent => {
+      const { Statement }: { Statement: Parser<any> } = parserAtIndent(newIndent)
+      return Statement.sepBy1(_EOL.atLeast(1).then(_nonNL).chain(nextIndent => {
         if (nextIndent.length === newIndent.length) return succeed('')
         return fail(`Statement improperly indented\n`
           + `Indented ${nextIndent.length} spaces, needs to be indented `
@@ -252,7 +252,7 @@ export function parserAtIndent(indent: string) {
         //           like, expected proper indent *or* '+' or '-' etc).
         //           Forgiving parser-based error message isn't the only
         //           solution, line continuations should probably be indented
-      })))
+      })).map(stmts => stmts.filter(Boolean))
     }
     return fail(`Statement block improperly indented\n`
       + `Only indented ${newIndent.length} spaces, needs to be indented `
@@ -290,6 +290,7 @@ const WhenDecl = seqMap(
 export const Declaration = alt(StateDecl, WhenDecl)
 
 
-export const ProgramParser =
-  s('Mechanical v0.0.1\n').then(Declaration.or(_nonNL.result(null)).sepBy(_EOL))
-  .map(decls => decls.filter(Boolean))
+export const ProgramParser = s('Mechanical v0.0.1\n').then(
+  alt(Declaration, _nonNL.result(null))
+  .sepBy(_EOL.desc('Top-level declarations must be indented'))
+).map(decls => decls.filter(Boolean))
