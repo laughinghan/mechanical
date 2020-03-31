@@ -292,5 +292,5 @@ export const Declaration = alt(StateDecl, WhenDecl)
 
 export const ProgramParser = s('Mechanical v0.0.1\n').then(
   alt(Declaration, _nonNL.result(null))
-  .sepBy(_EOL.desc('Top-level declarations must be indented'))
+  .sepBy(_EOL.desc('Top-level declarations cannot be indented'))
 ).map(decls => decls.filter(Boolean))
