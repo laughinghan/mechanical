@@ -87,16 +87,16 @@ with Mechanical semantics, and wouldn't make sense for JS:
 - (TODO) `Cmd { ... }`
 - (TODO) Hashtagged values `#tag value` and pattern-matching `match tagged {...}`
 
-        Let x = Current switch_state ? #on 72 : #off "sleeping for the night"
-        // expression-form pattern-matching:
-        Let y = match x { #on temp -> temp; #off message -> 68 }
-        // statement-form pattern-matching:
-        Match x:
-            #on temp ->
-                Change color to #green
-                Change temperature_dial to temp
-            #off message ->
-                Change display_message to message.slice(0, 100)
+      Let x = Current switch_state ? #on 72 : #off "sleeping for the night"
+      // expression-form pattern-matching:
+      Let y = match x { #on temp -> temp; #off message -> 68 }
+      // statement-form pattern-matching:
+      Match x:
+          #on temp ->
+              Change color to #green
+              Change temperature_dial to temp
+          #off message ->
+              Change display_message to message.slice(0, 100)
 
 Extensions to JavaScript features:
 - Multiline strings
@@ -152,38 +152,38 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
     + (`!=` can't be chained because should `1 != 2 != 1` be true or false?)
 - No [holes] in arrays (trailing commas are allowed though)
 
-        // valid:
-        [ 1, 2 ]
-        [ 1, 2, ]
-        [
-          1,
-          2,
-        ]
+      // valid:
+      [ 1, 2 ]
+      [ 1, 2, ]
+      [
+        1,
+        2,
+      ]
 
-        // invalid:
-        [ 1, , 2 ]
-        [ 1, 2,, ]
+      // invalid:
+      [ 1, , 2 ]
+      [ 1, 2,, ]
 
 - Mechanical records are much more restricted than JS objects. Field names must
   be valid identifiers, not arbitrary strings or numerals, and cannot be quoted.
   They also cannot be [computed], cannot be [method definitions], and there are
   no [getters or setters]. Trailing commas are allowed though!
 
-        // valid
-        { valid_identifier: 1 }
+      // valid
+      { valid_identifier: 1 }
 
-        // invalid
-        {
-          invalid__ident: 1,
-          _invalid: 2,
-          $invalid: 3,
-          "not an identifier at all": 4,
-          5: 6,
-          [compute(7, 8)]: 9,
-          method() {
-            Return 10
-          },
-        }
+      // invalid
+      {
+        invalid__ident: 1,
+        _invalid: 2,
+        $invalid: 3,
+        "not an identifier at all": 4,
+        5: 6,
+        [compute(7, 8)]: 9,
+        method() {
+          Return 10
+        },
+      }
 
 - Only arrow function expressions (e.g. `x => 2*x`) are supported (no
   `function (x) { return 2*x }`-style function expressions), functions must
@@ -191,14 +191,14 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
   no-argument function do?), and trailing commas aren't allowed
   (TODO: method-calling syntax/UFCS, named args when >2 params)
 
-        // valid
-        x => 2*x
-        (x, y) => sqrt(x**2 + y**2)
+      // valid
+      x => 2*x
+      (x, y) => sqrt(x**2 + y**2)
 
-        // invalid
-        () => 1
-        (x, y,) => sqrt(x**2 + y**2)
-        function (x) { return 2*x }
+      // invalid
+      () => 1
+      (x, y,) => sqrt(x**2 + y**2)
+      function (x) { return 2*x }
 
 - No bitwise operators
     + We have none of `~`, `&`, `|`, `<<`, `>>`, `>>>` built-in, but I hope to
