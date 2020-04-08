@@ -62,6 +62,7 @@ export function parserAtIndent(indent: string) {
   //
   const Expression: Parser<any> = lazy(() => alt(ArrowFunc, CondExpr))
 
+  const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
   const Numeral = r(/\d+/).desc('numeral (e.g. 123)') // TODO decimals, exponential notation
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`)
@@ -95,7 +96,6 @@ export function parserAtIndent(indent: string) {
     .map(pairs => ({ type: 'RecordLiteral', pairs }))
   ).skip(s('}'))
     .desc('record literal (e.g. { ... })')
-  const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
 
   const PrimaryExpr = alt( // in terms of operator precedence, "primary expressions"
       // are the smallest units, which are either actual leaf nodes (variables,
