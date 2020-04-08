@@ -104,18 +104,18 @@ Extensions to JavaScript features:
       subsequent lines must be indented to at least the same level as the
       open-quote; that indentation is then omitted from the result:
 
-        When button.Click:
-            Let valid_string = "first line
-            second line
-              third line" // == "first line\nsecondline\n  third line"
+          When button.Click:
+              Let valid_string = "first line
+              second line
+                third line" // == "first line\nsecondline\n  third line"
 
-        When button2.Click:
-            Let invalid_string = "first line
-          second line" // error!
+          When button2.Click:
+              Let invalid_string = "first line
+            second line" // error!
 
-- (TODO) Alternate string interpolation syntax <code>$`text {expression} text`</code>
+- (TODO) Alternate string interpolation syntax ``` $`text {expression} text` ```
     + In addition to JS [template literal syntax] (e.g.
-      <code>`text ${expression} text`</code>), Mechanical supports an alternative
+      ``` `text ${expression} text` ```), Mechanical supports an alternative
       string interpolation syntax where you prefix the string with `$`:
 
           $`text {expression} text`
