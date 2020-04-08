@@ -64,6 +64,8 @@ export function parserAtIndent(indent: string) {
 
   const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
   const Numeral = r(/\d+/).desc('numeral (e.g. 123)') // TODO decimals, exponential notation
+  const FieldFunc = s('.').then(Identifier).map(name => '.' + name)
+    .desc('field access function (e.g. .field_name)')
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`)
     .chain(str => {
@@ -105,6 +107,7 @@ export function parserAtIndent(indent: string) {
     ParenGroup,
     Identifier,
     Numeral,
+    FieldFunc,
     StringLiteral,
     ArrayLiteral,
     RecordLiteral,

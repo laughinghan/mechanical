@@ -26,6 +26,16 @@ suite('Parser', () => {
       })
       // TODO: decimals, exponential notation, hexadecimals?
     })
+    suite('field access functions', () => {
+      test('basic .field_name', () => {
+        const observed = parser.Expression.tryParse('.field_name')
+        const expected = '.field_name'
+        assert.strictEqual(observed, expected)
+      })
+      test('no space allowed after dot ". field_name"', () => {
+        assert(!parser.Expression.parse('. field_name').status)
+      })
+    })
     suite('string literals', () => {
       test('basic "asdf"', () => {
         const observed = parser.Expression.tryParse('"asdf"')
