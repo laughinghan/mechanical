@@ -1188,6 +1188,38 @@ suite('Parser', () => {
       })
     })
 
+    suite('AfterGotStmt', () => {
+      test('basic ~ After got x, y, z ~', () => {
+        const observed = parser.Statement.tryParse('~ After got x, y, z ~')
+        const expected = {
+          type: 'AfterGotStmt',
+          vars: ['x', 'y', 'z'],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic no tildes', () => {
+        const observed = parser.Statement.tryParse('After got x, y, z')
+        const expected = {
+          type: 'AfterGotStmt',
+          vars: ['x', 'y', 'z'],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic one var', () => {
+        const observed = parser.Statement.tryParse('~ After got x ~')
+        const expected = {
+          type: 'AfterGotStmt',
+          vars: ['x'],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('at least one var required', () => {
+        const result = parser.Statement.parse('~ After got ~')
+        assert(!result.status)
+        assert.strictEqual((result as Failure).index.offset, 12)
+      })
+    })
+
     suite('StatementIndentBlock', () => {
       test('basic indent block', () => {
         const observed = Declaration.tryParse(

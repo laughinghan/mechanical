@@ -247,6 +247,9 @@ export function parserAtIndent(indent: string) {
   //
   const ReturnStmt = s('Return').then(__).then(Expression)
     .map(expr => ({ type: 'ReturnStmt', expr }))
+  const EmitStmt = s('Emit').then(__).then(Expression)
+    .map(expr => ({ type: 'EmitStmt', expr }))
+
   const LetStmt = seqMap(
     s('Let').then(__).then(Identifier), s('=').trim(_).then(Expression),
     (varName, expr) => ({ type: 'LetStmt', varName, expr }),
@@ -256,7 +259,25 @@ export function parserAtIndent(indent: string) {
     (varName, expr) => ({ type: 'ChangeStmt', varName, expr })
   )
 
-  const Statement = alt(ReturnStmt, LetStmt, ChangeStmt)
+  const DoStmt = s('Do').then(__).then(Expression)
+    .map(expr => ({ type: 'DoStmt', expr }))
+  const GetDoStmt = seqMap(
+    s('Get').then(__).then(Identifier),
+    s('=').trim(_).then(s('Do')).then(_).then(Expression),
+    (varName, expr) => ({ type: 'GetDoStmt', varName, expr })
+  )
+  const FutureDoStmt = seqMap(
+    s('Future').then(__).then(Identifier),
+    s('=').trim(_).then(s('Do')).then(_).then(Expression),
+    (varName, expr) => ({ type: 'FutureDoStmt', varName, expr })
+  )
+  const AfterGotStmt = r(/~* *After +got +/).then(
+    Identifier.sepBy1(s(',').trim(_))
+    .desc('at least one variable required in "After got ..." statement')
+  ).skip(r(/ *~*/)).map(vars => ({ type: 'AfterGotStmt', vars }))
+
+  const Statement = alt(ReturnStmt, EmitStmt, LetStmt, ChangeStmt,
+    DoStmt, GetDoStmt, FutureDoStmt, AfterGotStmt)
 
   const StatementIndentBlock = _EOL.many().then(_nonNL).chain(newIndent => {
     if (newIndent.length > indent.length) {
