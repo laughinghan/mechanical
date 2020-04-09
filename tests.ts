@@ -547,6 +547,90 @@ suite('Parser', () => {
   })
 
   suite('expression operator precedence stack', () => {
+    suite('FieldFunc, FieldAccessExpr, CallExpr', () => {
+      test('basic MemberExpr record.field', () => {
+        const observed = parser.Expression.tryParse('record.field')
+        const expected = {
+          type: 'FieldAccessExpr',
+          record: 'record',
+          fieldName: 'field',
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic prefix CallExpr f(x)', () => {
+        const observed = parser.Expression.tryParse('f(x)')
+        const expected = {
+          type: 'CallExpr',
+          contextArg: null,
+          func: 'f',
+          args: [{ label: null, arg: 'x' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('basic infix CallExpr aka method-call value.func(arg)', () => {
+        const observed = parser.Expression.tryParse('value.func(arg)')
+        const expected = {
+          type: 'CallExpr',
+          contextArg: 'value',
+          func: 'func',
+          args: [{ label: null, arg: 'arg' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('call a field access function .field(record)', () => {
+        const observed = parser.Expression.tryParse('.field(record)')
+        const expected = {
+          type: 'CallExpr',
+          contextArg: null,
+          func: '.field',
+          args: [{ label: null, arg: 'record' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('labeled arguments func(from: 1, to: 100)', () => {
+        const observed = parser.Expression.tryParse('func(from: 1, to: 100)')
+        const expected = {
+          type: 'CallExpr',
+          contextArg: null,
+          func: 'func',
+          args: [{ label: 'from', arg: '1' }, { label: 'to', arg: '100' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('labeled method arguments thing.func(from: 1, to: 100)', () => {
+        const observed = parser.Expression.tryParse('thing.func(from: 1, to: 100)')
+        const expected = {
+          type: 'CallExpr',
+          contextArg: 'thing',
+          func: 'func',
+          args: [{ label: 'from', arg: '1' }, { label: 'to', arg: '100' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('altogether now: mapping a field func over a list', () => {
+        const observed = parser.Expression.tryParse(
+          `[{ foo: 1, bar: 'whatever' }, { foo: 2, bar: 'lol' }].each(.foo)`)
+        const expected = {
+          type: 'CallExpr',
+          contextArg: {
+            type: 'ArrayLiteral',
+            exprs: [
+              {
+                type: 'RecordLiteral',
+                pairs: [{ key: 'foo', val: '1' }, { key: 'bar', val: "'whatever'" }],
+              },
+              {
+                type: 'RecordLiteral',
+                pairs: [{ key: 'foo', val: '2' }, { key: 'bar', val: "'lol'" }],
+              },
+            ],
+          },
+          func: 'each',
+          args: [{ label: null, arg: '.foo' }],
+        }
+        assert.deepStrictEqual(observed, expected)
+      })
+    })
     suite('UnaryExpr', () => {
       test('basic -2', () => {
         const observed = parser.Expression.tryParse('-2')

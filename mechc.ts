@@ -112,13 +112,32 @@ export function parserAtIndent(indent: string) {
     ArrayLiteral,
     RecordLiteral,
   )
-  const UnaryExpr = alt( // (tightest-binding operator)
-    seqMap(r(/[-!]/).skip(_), PrimaryExpr,
-      (op, arg) => ({ type: 'UnaryExpr', op, arg })),
+  const FieldAccessExpr = alt( // (tightest-binding operator)
+    seqMap(PrimaryExpr.skip(s('.').trim(_)), Identifier,
+      (record, fieldName) => ({ type: 'FieldAccessExpr', record, fieldName })),
     PrimaryExpr,
   )
+  const CallExpr = alt( // as an exception to operator precedence, binds tighter
+    seqMap( // leftwards than FieldAccessExpr, because of how '.' is overloaded
+      PrimaryExpr.skip(_),
+      s('.').then(Identifier.trim(_)).or(succeed(null)),
+      s('(').then(
+        seqMap(Identifier.skip(s(':').trim(_)).or(succeed(null)), Expression,
+          (label, arg) => ({ label, arg })).sepBy(s(',').trim(_)).trim(_)
+      ).skip(s(')')),
+      (expr, infixIdent, args) => infixIdent === null
+        ? { type: 'CallExpr', contextArg: null, func: expr,       args }
+        : { type: 'CallExpr', contextArg: expr, func: infixIdent, args }
+    ),
+    FieldAccessExpr,
+  )
+  const UnaryExpr = alt(
+    seqMap(r(/[-!]/).skip(_), CallExpr,
+      (op, arg) => ({ type: 'UnaryExpr', op, arg })),
+    CallExpr,
+  )
   const ExponentExpr = alt(
-    seqMap(PrimaryExpr.skip(s('**').trim(_)), UnaryExpr,
+    seqMap(CallExpr.skip(s('**').trim(_)), UnaryExpr,
       (left, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
         // Note 1: as a special exception to typical operator precedence,
         // exponents binds equally tightly leftwards as UnaryExpr, to avoid the

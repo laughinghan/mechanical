@@ -96,7 +96,7 @@ with Mechanical semantics, and wouldn't make sense for JS:
               Change color to #green
               Change temperature_dial to temp
           #off message ->
-              Change display_message to message.slice(0, 100)
+              Change display_message to message.slice(from: 0, to: 100)
 
 Extensions to JavaScript features:
 - Multiline strings
