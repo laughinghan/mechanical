@@ -14,14 +14,136 @@ import {
   regex as r,
 } from 'parsimmon'
 
+//
+// Parser
+//
+
+namespace AST {
+  export type Expression = PrimaryExpr | FieldAccessExpr | CallExpr | UnaryExpr
+    | BinaryExpr | CompareChainExpr | CondExpr | ArrowFunc
+
+  export type PrimaryExpr = string | ArrayLiteral | RecordLiteral
+  export interface ArrayLiteral {
+    type: 'ArrayLiteral'
+    exprs: Expression[]
+  }
+  export interface RecordLiteral {
+    type: 'RecordLiteral'
+    pairs: Array<{
+      key: string
+      val: Expression
+    }>
+  }
+
+  export interface FieldAccessExpr {
+    type: 'FieldAccessExpr'
+    record: Expression
+    fieldName: string
+  }
+  export interface CallExpr {
+    type: 'CallExpr'
+    contextArg: Expression | null
+    func: Expression
+    args: Array<{
+      label: string | null
+      arg: Expression
+    }>
+  }
+  export interface UnaryExpr {
+    type: 'UnaryExpr'
+    op: '-' | '!'
+    arg: Expression
+  }
+  export interface BinaryExpr {
+    type: 'BinaryExpr'
+    op: '**' | '*' | '/' | '%' | '+' | '-' | '!=' | '==' | '<' | '>' | '<='
+      | '>=' | '&&' | '||' // in order of precedence
+    left: Expression
+    right: Expression
+  }
+  export interface CompareChainExpr {
+    type: 'CompareChainExpr'
+    chain: BinaryExpr[]
+  }
+  export interface CondExpr {
+    type: 'CondExpr'
+    test: Expression
+    ifYes: Expression
+    ifNo: Expression
+  }
+  export interface ArrowFunc {
+    type: 'ArrowFunc'
+    params: string[]
+    body: Expression | Statement[]
+  }
+
+
+  export type Statement = ReturnStmt | EmitStmt | LetStmt | ChangeStmt
+    | DoStmt | GetDoStmt | FutureDoStmt | AfterGotStmt
+
+  export interface ReturnStmt {
+    type: 'ReturnStmt'
+    expr: Expression
+  }
+  export interface EmitStmt {
+    type: 'EmitStmt'
+    expr: Expression
+  }
+
+  export interface LetStmt {
+    type: 'LetStmt'
+    varName: string
+    expr: Expression
+  }
+  export interface ChangeStmt {
+    type: 'ChangeStmt'
+    varName: string
+    expr: Expression
+  }
+
+  export interface DoStmt {
+    type: 'DoStmt'
+    expr: Expression
+  }
+  export interface GetDoStmt {
+    type: 'GetDoStmt'
+    varName: string
+    expr: Expression
+  }
+  export interface FutureDoStmt {
+    type: 'FutureDoStmt'
+    varName: string
+    expr: Expression
+  }
+  export interface AfterGotStmt {
+    type: 'AfterGotStmt'
+    vars: string[]
+  }
+
+
+  export interface StateDecl {
+    type: 'StateDecl'
+    varName: string
+    expr: Expression
+  }
+  export interface WhenDecl {
+    type: 'WhenDecl'
+    event: Expression
+    varName: string | null
+    body: Statement[]
+  }
+
+  export type TopLevel = StateDecl | WhenDecl | DoStmt | GetDoStmt
+}
+
 // who says you can't do left-recursion in a top-down parser? Come at me!
-function leftRecur<Expr, Op>(
-  argParser: Parser<Expr>,
+function leftRecur<Op, BinExpr, ArgExpr extends BinExpr>(
+  argParser: Parser<ArgExpr>,
   opParser: Parser<Op>,
-  map: (op: Op, left: Expr, right: Expr) => Expr
-): Parser<Expr> {
+  map: (op: Op, left: BinExpr, right: BinExpr) => BinExpr
+): Parser<BinExpr> {
   return seqMap(argParser, seq(opParser, argParser).many(), (first, rest) =>
-    rest.reduce((left, [op, right]) => map(op, left, right), first))
+    rest.reduce((left, [op, right]) => map(op, left, right), first as BinExpr))
 }
 
 // many <parser>'s separated by <separator>, with optional trailing <separator>
@@ -57,12 +179,18 @@ const Identifier = r(/[a-z](?:[a-z0-9]|_[a-z0-9])*/i) // TODO non-English letter
   .desc('identifier (e.g. example_identifier)')
 
 
-export function parserAtIndent(indent: string) {
+export function parserAtIndent(indent: string): {
+  Expression: Parser<AST.Expression>,
+  Statement: Parser<AST.Statement>,
+  StatementIndentBlock: Parser<AST.Statement[]>,
+  DoStmt: Parser<AST.DoStmt>,
+  GetDoStmt: Parser<AST.GetDoStmt>,
+} {
   //
   // Expression Grammar (based on JS)
   //   https://tc39.es/ecma262/#sec-ecmascript-language-expressions
   //
-  const Expression: Parser<any> = lazy(() => alt(ArrowFunc, CondExpr))
+  const Expression: Parser<AST.Expression> = lazy(() => alt(ArrowFunc, CondExpr))
 
   const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
   const Numeral = r(/\d(?:\d|_\d)*/).desc('numeral (e.g. 123, 9_000)') // TODO decimals, exponential notation
@@ -90,14 +218,14 @@ export function parserAtIndent(indent: string) {
     })
   const ArrayLiteral = s('[').then(
     Expression.thru(sepByOptTrailing(s(',').trim(_))).trim(_)
-    .map(exprs => ({ type: 'ArrayLiteral', exprs }))
+    .map<AST.ArrayLiteral>(exprs => ({ type: 'ArrayLiteral', exprs }))
   ).skip(s(']'))
     .desc('array literal (e.g. [ ... ])')
   const RecordLiteral = s('{').then(
     seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
       (key, val) => ({ key, val: val ?? key }))
     .thru(sepByOptTrailing(s(',').trim(_))).trim(_)
-    .map(pairs => ({ type: 'RecordLiteral', pairs }))
+    .map<AST.RecordLiteral>(pairs => ({ type: 'RecordLiteral', pairs }))
   ).skip(s('}'))
     .desc('record literal (e.g. { ... })')
 
@@ -114,12 +242,12 @@ export function parserAtIndent(indent: string) {
     ArrayLiteral,
     RecordLiteral,
   )
-  const FieldAccessExpr = alt( // (tightest-binding operator)
+  const FieldAccessExpr = alt<AST.Expression>( // (tightest-binding operator)
     seqMap(PrimaryExpr.skip(s('.').trim(_)), Identifier,
       (record, fieldName) => ({ type: 'FieldAccessExpr', record, fieldName })),
     PrimaryExpr,
   )
-  const CallExpr = alt( // as an exception to operator precedence, binds tighter
+  const CallExpr = alt<AST.Expression>( // as an exception to operator precedence, binds tighter
     seqMap( // leftwards than FieldAccessExpr, because of how '.' is overloaded
       PrimaryExpr.skip(_),
       s('.').then(Identifier.trim(_)).or(succeed(null)),
@@ -133,12 +261,12 @@ export function parserAtIndent(indent: string) {
     ),
     FieldAccessExpr,
   )
-  const UnaryExpr = alt(
-    seqMap(r(/[-!]/).skip(_), CallExpr,
+  const UnaryExpr = alt<AST.Expression>(
+    seqMap(r(/[-!]/).skip(_) as Parser<'-' | '!'>, CallExpr,
       (op, arg) => ({ type: 'UnaryExpr', op, arg })),
     CallExpr,
   )
-  const ExponentExpr = alt(
+  const ExponentExpr = alt<AST.Expression>(
     seqMap(CallExpr.skip(s('**').trim(_)), UnaryExpr,
       (left, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
         // Note 1: as a special exception to typical operator precedence,
@@ -158,24 +286,25 @@ export function parserAtIndent(indent: string) {
         // left-associative, e.g. 2/3/4 = (2/3)/4 and not 2/(3/4)
     UnaryExpr,
   )
-  const MultExpr = leftRecur(
-    ExponentExpr, r(/[*/%]/).trim(_),
+  const MultExpr: Parser<AST.Expression> = leftRecur(
+    ExponentExpr, r(/[*/%]/).trim(_) as Parser<'*' | '/' | '%'>,
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   )
-  const AddExpr = leftRecur(
-    MultExpr, r(/[+-]/).trim(_),
+  const AddExpr: Parser<AST.Expression> = leftRecur(
+    MultExpr, r(/[+-]/).trim(_) as Parser<'+' | '-'>,
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   )
-  const InequalityExpr = seqMap( // mutually exclusive precedence with
-      // other comparisons and may not be chained, because (1 != 2 != 1) == #yes
-      // would be weird, but anything else would require quadratic comparisons
+  const InequalityExpr: Parser<AST.BinaryExpr> = seqMap( // mutually
+      // exclusive precedence with other comparisons and cannot be chained,
+      // because (1 != 2 != 1) == #yes could be surprising, but anything else
+      // would require quadratic comparisons
     AddExpr.skip(s('!=').trim(_)), AddExpr,
     (left, right) => ({ type: 'BinaryExpr', op: '!=', left, right })
   )
-  const CompareChainExpr = seqMap(
+  const CompareChainExpr: Parser<AST.Expression> = seqMap(
     AddExpr,
     seqMap(
-      seq(s('==').trim(_), AddExpr).many(), // we need to special-case the
+      seq(s('==' as string).trim(_), AddExpr).many(), // we need to special-case the
         // leading =='s because alt() requires failure to fall-through to the
         // next alternative, and when parsing "a == b > c" the first alternative
         // won't fail, rather it succeeds parsing '== b', but the overall parser
@@ -192,7 +321,7 @@ export function parserAtIndent(indent: string) {
       : rest.length === 1
         ? {
             type: 'BinaryExpr',
-            op: rest[0][0],
+            op: rest[0][0] as AST.BinaryExpr['op'],
             left: first,
             right: rest[0][1],
           }
@@ -200,35 +329,35 @@ export function parserAtIndent(indent: string) {
             type: 'CompareChainExpr',
             chain: rest.map(([op, arg], i) => ({
               type: 'BinaryExpr',
-              op,
+              op: op as AST.BinaryExpr['op'],
               left: i ? rest[i-1][1] : first,
               right: arg,
             })),
           })
   )
   const CompareExpr = alt(InequalityExpr, CompareChainExpr)
-  const AndExpr = leftRecur( // conventionally higher precedence than OrExpr
-    CompareExpr, s('&&').trim(_),
+  const AndExpr: Parser<AST.Expression> = leftRecur( // conventionally higher
+    CompareExpr, s('&&').trim(_),                    // precedence than OrExpr
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   )
-  const OrExpr = leftRecur( // conventionally lower precedence than AndExpr
-    AndExpr, s('||').trim(_),
+  const OrExpr: Parser<AST.Expression> = leftRecur( // conventionally lower
+    AndExpr, s('||').trim(_),                       // precedence than AndExpr
     (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
   )
-  const CondExpr = alt(
+  const CondExpr = alt<AST.Expression>(
     seqMap(
       OrExpr.skip(s('?').trim(_)), Expression.skip(s(':').trim(_)), Expression,
       (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })
     ),
     OrExpr,
   )
-  const ArrowFunc = lazy(() => seqMap(
+  const ArrowFunc = lazy<AST.ArrowFunc>(() => seqMap(
     alt(
       Identifier.map(param => [param]),
       s('(').then(Identifier.sepBy1(s(',').trim(_)).trim(_)).skip(s(')')),
     )
     .skip(s('=>').trim(_)),
-    alt(
+    alt<AST.Expression | AST.Statement[]>(
       lookahead(/[^{]/).then(Expression), // negative lookahead to prohibit
         // record literals, same as JS, even though our statement syntax is
         // actually restrictive enough that it's not ambiguous, unlike JS.
@@ -248,42 +377,42 @@ export function parserAtIndent(indent: string) {
   // allowed in the body of an event handler declaration, or in a cmd {} block
   //
   const ReturnStmt = s('Return').then(__).then(Expression)
-    .map(expr => ({ type: 'ReturnStmt', expr }))
+    .map<AST.ReturnStmt>(expr => ({ type: 'ReturnStmt', expr }))
   const EmitStmt = s('Emit').then(__).then(Expression)
-    .map(expr => ({ type: 'EmitStmt', expr }))
+    .map<AST.EmitStmt>(expr => ({ type: 'EmitStmt', expr }))
 
-  const LetStmt = seqMap(
+  const LetStmt: Parser<AST.LetStmt> = seqMap(
     s('Let').then(__).then(Identifier), s('=').trim(_).then(Expression),
     (varName, expr) => ({ type: 'LetStmt', varName, expr }),
   )
-  const ChangeStmt = seqMap(
+  const ChangeStmt: Parser<AST.ChangeStmt> = seqMap(
     s('Change').then(__).then(Identifier), s('to').trim(_).then(Expression),
     (varName, expr) => ({ type: 'ChangeStmt', varName, expr })
   )
 
   const DoStmt = s('Do').then(__).then(Expression)
-    .map(expr => ({ type: 'DoStmt', expr }))
-  const GetDoStmt = seqMap(
+    .map<AST.DoStmt>(expr => ({ type: 'DoStmt', expr }))
+  const GetDoStmt: Parser<AST.GetDoStmt> = seqMap(
     s('Get').then(__).then(Identifier),
     s('=').trim(_).then(s('Do')).then(_).then(Expression),
     (varName, expr) => ({ type: 'GetDoStmt', varName, expr })
   )
-  const FutureDoStmt = seqMap(
+  const FutureDoStmt: Parser<AST.FutureDoStmt> = seqMap(
     s('Future').then(__).then(Identifier),
     s('=').trim(_).then(s('Do')).then(_).then(Expression),
     (varName, expr) => ({ type: 'FutureDoStmt', varName, expr })
   )
-  const AfterGotStmt = r(/~* *After +got +/).then(
+  const AfterGotStmt: Parser<AST.AfterGotStmt> = r(/~* *After +got +/).then(
     Identifier.sepBy1(s(',').trim(_))
     .desc('at least one variable required in "After got ..." statement')
   ).skip(r(/ *~*/)).map(vars => ({ type: 'AfterGotStmt', vars }))
 
-  const Statement = alt(ReturnStmt, EmitStmt, LetStmt, ChangeStmt,
-    DoStmt, GetDoStmt, FutureDoStmt, AfterGotStmt)
+  const Statement = alt<AST.Statement>(ReturnStmt, EmitStmt, LetStmt,
+    ChangeStmt, DoStmt, GetDoStmt, FutureDoStmt, AfterGotStmt)
 
   const StatementIndentBlock = _EOL.many().then(_nonNL).chain(newIndent => {
     if (newIndent.length > indent.length) {
-      const { Statement }: { Statement: Parser<any> } = parserAtIndent(newIndent)
+      const { Statement } = parserAtIndent(newIndent)
       return Statement.sepBy1(_EOL.atLeast(1).then(_nonNL).chain(nextIndent => {
         if (nextIndent.length === newIndent.length) return succeed('')
         return fail(`Statement improperly indented\n`
@@ -321,24 +450,25 @@ export const parser = parserAtIndent('')
 // Top-Level Declarations
 // all exported
 //
-const StateDecl = seqMap(
+const StateDecl: Parser<AST.StateDecl> = seqMap(
   s('State').then(__).then(Identifier), s('=').trim(_).then(parser.Expression),
   (varName, expr) => ({ type: 'StateDecl', varName, expr })
 )
-const WhenDecl = seqMap(
+const WhenDecl: Parser<AST.WhenDecl> = seqMap(
   s('When').then(__).then(parser.Expression),
   alt(s('with').trim(__).then(Identifier), succeed(null))
   .skip(_).skip(s(':')).skip(_EOL),
   parser.StatementIndentBlock,
   (event, varName, body) => ({ type: 'WhenDecl', event, varName, body })
 )
-export const TopLevel = alt(StateDecl, WhenDecl, parser.DoStmt, parser.GetDoStmt)
+export const TopLevel =
+  alt<AST.TopLevel>(StateDecl, WhenDecl, parser.DoStmt, parser.GetDoStmt)
 
 
 export const ProgramParser = s('Mechanical v0.0.1\n').then(
   alt(TopLevel, _nonNL.result(null))
   .sepBy(_EOL.desc('Top-level declarations cannot be indented'))
-).map(decls => decls.filter(Boolean))
+).map((decls => decls.filter(Boolean)) as <T>(decl: T[]) => Exclude<T, null>[])
 
 
 
@@ -346,7 +476,7 @@ export const ProgramParser = s('Mechanical v0.0.1\n').then(
 //
 // Compilation: AST -> JS text
 //
-function compileExpr(scope: any, expr: any): string {
+function compileExpr(scope: {[k: string]: string}, expr: AST.Expression): string {
   if (typeof expr === 'string') {
     // TODO: field access functions, escaping line terminators in string literals
     return expr
@@ -355,13 +485,13 @@ function compileExpr(scope: any, expr: any): string {
     case 'CallExpr':
       if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
       return `${compileExpr(scope, expr.func)}(${
-        expr.args.map(({arg}: {arg: any}) => compileExpr(scope, arg)).join(', ')})`
+        expr.args.map(({arg}) => compileExpr(scope, arg)).join(', ')})`
     default:
       throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
   }
 }
 
-function compileStmt(scope: any, stmt: any) {
+function compileStmt(scope: {[k: string]: string}, stmt: AST.Statement) {
   switch (stmt.type) {
     case 'DoStmt':
       return `${compileExpr(scope, stmt.expr)}();\n`
@@ -372,7 +502,9 @@ export function compile(source: string) {
   const ast = ProgramParser.tryParse(source)
 
   // reorder top-level
-  const statements: any[] = [], stateDecls: any[] = [], whenDecls: any[] = []
+  const statements: AST.Statement[] = []
+  const stateDecls: AST.StateDecl[] = []
+  const whenDecls: AST.WhenDecl[] = []
   for (const topLevel of ast) {
     if (topLevel.type === 'StateDecl') stateDecls.push(topLevel)
     else if (topLevel.type === 'WhenDecl') whenDecls.push(topLevel)
@@ -380,7 +512,7 @@ export function compile(source: string) {
   }
 
   let js = ''
-  const topLevelScope: {[name: string]: string} = {
+  const topLevelScope: {[k: string]: string} = {
     console_log: '(...args) => () => console.log(...args)'
   }
 
