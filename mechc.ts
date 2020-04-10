@@ -170,7 +170,7 @@ export function parserAtIndent(indent: string) {
       // other comparisons and may not be chained, because (1 != 2 != 1) == #yes
       // would be weird, but anything else would require quadratic comparisons
     AddExpr.skip(s('!=').trim(_)), AddExpr,
-    (left, right) => ({ type: 'InequalityExpr', left, right })
+    (left, right) => ({ type: 'BinaryExpr', op: '!=', left, right })
   )
   const CompareChainExpr = seqMap(
     AddExpr,

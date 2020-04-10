@@ -834,7 +834,8 @@ suite('Parser', () => {
       test('basic a != b', () => {
         const observed = parser.Expression.tryParse('a != b')
         const expected = {
-          type: 'InequalityExpr',
+          type: 'BinaryExpr',
+          op: '!=',
           left: 'a',
           right: 'b',
         }
