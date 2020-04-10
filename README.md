@@ -20,8 +20,8 @@ finite-state machines.
   Compile to JavaScript modules that can call or be called by any JS library
   or browser/Node API.
 
-**Note:** very incomplete and buggy, don't rely on it actually working.
-**Help wanted!**
+**Status:** First compile and run of Hello World works&mdash;and absolutely
+nothing else. Help wanted!
 
 [The Elm Architecture]: https://guide.elm-lang.org/architecture/
 
