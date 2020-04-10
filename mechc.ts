@@ -1,3 +1,5 @@
+import fs from 'fs'
+
 import {
   Parser,
   makeFailure,
@@ -63,7 +65,7 @@ export function parserAtIndent(indent: string) {
   const Expression: Parser<any> = lazy(() => alt(ArrowFunc, CondExpr))
 
   const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
-  const Numeral = r(/\d+/).desc('numeral (e.g. 123)') // TODO decimals, exponential notation
+  const Numeral = r(/\d(?:\d|_\d)*/).desc('numeral (e.g. 123, 9_000)') // TODO decimals, exponential notation
   const FieldFunc = s('.').then(Identifier).map(name => '.' + name)
     .desc('field access function (e.g. .field_name)')
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
@@ -309,7 +311,7 @@ export function parserAtIndent(indent: string) {
     )
   ).skip(s('}'))
 
-  return { Expression, Statement, StatementIndentBlock }
+  return { Expression, Statement, StatementIndentBlock, DoStmt, GetDoStmt }
 }
 
 export const parser = parserAtIndent('')
@@ -330,10 +332,102 @@ const WhenDecl = seqMap(
   parser.StatementIndentBlock,
   (event, varName, body) => ({ type: 'WhenDecl', event, varName, body })
 )
-export const Declaration = alt(StateDecl, WhenDecl)
+export const TopLevel = alt(StateDecl, WhenDecl, parser.DoStmt, parser.GetDoStmt)
 
 
 export const ProgramParser = s('Mechanical v0.0.1\n').then(
-  alt(Declaration, _nonNL.result(null))
+  alt(TopLevel, _nonNL.result(null))
   .sepBy(_EOL.desc('Top-level declarations cannot be indented'))
 ).map(decls => decls.filter(Boolean))
+
+
+
+
+//
+// Compilation: AST -> JS text
+//
+function compileExpr(scope: any, expr: any): string {
+  if (typeof expr === 'string') {
+    // TODO: field access functions, escaping line terminators in string literals
+    return expr
+  }
+  switch (expr.type) {
+    case 'CallExpr':
+      if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
+      return `${compileExpr(scope, expr.func)}(${
+        expr.args.map(({arg}: {arg: any}) => compileExpr(scope, arg)).join(', ')})`
+    default:
+      throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
+  }
+}
+
+function compileStmt(scope: any, stmt: any) {
+  switch (stmt.type) {
+    case 'DoStmt':
+      return `${compileExpr(scope, stmt.expr)}();\n`
+  }
+}
+
+export function compile(source: string) {
+  const ast = ProgramParser.tryParse(source)
+
+  // reorder top-level
+  const statements: any[] = [], stateDecls: any[] = [], whenDecls: any[] = []
+  for (const topLevel of ast) {
+    if (topLevel.type === 'StateDecl') stateDecls.push(topLevel)
+    else if (topLevel.type === 'WhenDecl') whenDecls.push(topLevel)
+    else statements.push(topLevel)
+  }
+
+  let js = ''
+  const topLevelScope: {[name: string]: string} = {
+    console_log: '(...args) => () => console.log(...args)'
+  }
+
+  // runtime
+  js += '// runtime:\n'
+  for (const name in topLevelScope) {
+    js += `const ${name} = ${topLevelScope[name]};\n`
+  }
+  js += '\n'
+
+  // TODO: compile State declarations
+
+  // compile statements
+  for (const statement of statements) js += compileStmt(topLevelScope, statement)
+
+  // TODO: compile When declarations
+  return js
+}
+
+
+
+
+//
+// Command-line parsing
+//
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  const argv = process.argv
+  if (argv.includes('-h') || argv.includes('--help')) {
+    console.error('Usage: npx mechc some_file.mech     # writes the compiled output to some_file.js\n'
+                + '   or: npx mechc < some_file.mechc  # writes the compiled output to stdout\n'
+                + '\n'
+                + 'For more info, see: https://github.com/laughinghan/mechanical')
+    process.exit()
+  }
+  if (argv.length > 3) {
+    console.error('Sorry, mechc only supports 0 or 1 arguments')
+    process.exit(1)
+  }
+
+  const sourceFile = process.argv[2] || 0 // fd 0 is stdin
+  if (sourceFile && sourceFile.slice(-5) !== '.mech') {
+    console.error('Sorry, mechc can only compile .mech files')
+    process.exit(1)
+  }
+  const outFile = sourceFile ? sourceFile.slice(0, -5) + '.js' : 1 // fd 1 is stdout
+
+  const sourceText = fs.readFileSync(sourceFile, { encoding: 'utf8' })
+  const outText = `// compiled by Mechanical v0.0.1 from ${sourceFile}\n\n` + compile(sourceText)
+  fs.writeFileSync(outFile, outText)
+}

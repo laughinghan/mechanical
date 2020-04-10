@@ -1,8 +1,10 @@
 import 'mocha'
 import assert from 'assert'
+import { exec } from 'child_process'
+import { Readable } from 'stream'
 import { Failure } from 'parsimmon'
 
-import { parserAtIndent, parser, Declaration, ProgramParser } from './mechc'
+import { parserAtIndent, parser, TopLevel, ProgramParser, compile } from './mechc'
 
 suite('Parser', () => {
   suite('primary exprs', () => {
@@ -1222,7 +1224,7 @@ suite('Parser', () => {
 
     suite('StatementIndentBlock', () => {
       test('basic indent block', () => {
-        const observed = Declaration.tryParse(
+        const observed = TopLevel.tryParse(
             'When evt:\n'
           + '    Change x to x+1'
         )
@@ -1239,7 +1241,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('comments in indent block', () => {
-        const observed = Declaration.tryParse(
+        const observed = TopLevel.tryParse(
             'When evt:\n'
           + '    // increment counter\n'
           + '    Change x to x+1\n'
@@ -1265,7 +1267,7 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(observed, expected)
 
-        const underIndentedObserved = Declaration.tryParse(
+        const underIndentedObserved = TopLevel.tryParse(
             'When evt:\n'
           + '  // comment\n'
           + '    Change x to x+1\n'
@@ -1291,7 +1293,7 @@ suite('Parser', () => {
         }
         assert.deepStrictEqual(underIndentedObserved, underIndentedExpected)
 
-        const overIndentedObserved = Declaration.tryParse(
+        const overIndentedObserved = TopLevel.tryParse(
             'When evt:\n'
           + '      // comment\n'
           + '    Change x to x+1\n'
@@ -1341,7 +1343,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('blank lines in indent block', () => {
-        const observed = Declaration.tryParse(
+        const observed = TopLevel.tryParse(
             'When evt:\n'
           + '\n' // not indented
           + '  \n' // indented wrong
@@ -1500,7 +1502,7 @@ suite('Parser', () => {
   suite('Top-Level Declarations', () => {
     suite('StateDecl', () => {
       test('basic State x = 1+2', () => {
-        const observed = Declaration.tryParse('State x = 1+2')
+        const observed = TopLevel.tryParse('State x = 1+2')
         const expected = {
           type: 'StateDecl',
           varName: 'x',
@@ -1517,7 +1519,7 @@ suite('Parser', () => {
 
     suite('WhenDecl', () => {
       test('basic no param', () => {
-        const observed = Declaration.tryParse(
+        const observed = TopLevel.tryParse(
             'When btnClick:\n'
           + '    Change x to x+1'
         )
@@ -1539,7 +1541,7 @@ suite('Parser', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('basic with param', () => {
-        const observed = Declaration.tryParse(
+        const observed = TopLevel.tryParse(
             'When btnClick with context:\n'
           + '    Change x to context'
         )
@@ -1681,5 +1683,32 @@ suite('ProgramParser', () => {
     )
     assert(!result2.status)
     assert.strictEqual((result2 as Failure).index.offset, 36)
+  })
+})
+
+suite('Compiler', () => {
+  test('basic program', async () => {
+    const observed = compile(
+        'Mechanical v0.0.1\n'
+      + '\n'
+      + 'Do console_log("hello, world")\n'
+    )
+    const expected =
+        '// runtime:\n'
+      + 'const console_log = (...args) => () => console.log(...args);\n'
+      + '\n'
+      + 'console_log("hello, world")();\n'
+    assert.strictEqual(observed, expected)
+
+    const observedRun = await new Promise((resolve, reject) => {
+      const run = exec('node', (err, stdout, stderr) => {
+        if (err) reject(err)
+        else if (stderr) reject('stderr: ' + stderr)
+        else resolve(stdout)
+      })
+      Readable.from(observed).pipe(run.stdin!)
+    })
+    const expectedRun = 'hello, world\n'
+    assert.strictEqual(observedRun, expectedRun)
   })
 })

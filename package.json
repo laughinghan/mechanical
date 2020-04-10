@@ -4,7 +4,7 @@
   "description": "A language that makes building webapps as easy as finite-state machines",
   "main": "mechc.js",
   "scripts": {
-    "test": "mocha -u tdd -r ts-node/register tests.ts"
+    "test": "mocha --exit -u tdd -r ts-node/register tests.ts"
   },
   "repository": {
     "type": "git",
