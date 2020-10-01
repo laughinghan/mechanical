@@ -5,14 +5,11 @@
 A language that makes building webapps (and more!) as easy as building
 finite-state machines.
 
-- **Best-of-all-worlds...**
-  + **...between declarative and imperative:**
-    Declaratively define a state machine, imperatively perform side-effects.
-  + **...between functional and imperative:**
-    All functions are pure, and the imperative-like syntax is referentially
+- **Best-of-all-worlds:**
+  + **Declaratively** define a state machine, **imperatively** perform side-effects.
+  + **All functions are pure**, even the imperative-like syntax is referentially
     transparent.
-  + **...between dynamic and static typing:**
-    No type annotations. No type declarations. Fully statically typechecked.
+  + **Statically typed**, but there are **no type annotations**.
 - **X% faster and Y% smaller than React:**
   Instead of virtual DOM diffing, just compile to imperative, mutative
   JavaScript.
