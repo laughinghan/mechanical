@@ -5,22 +5,25 @@
 A language that makes building webapps (and more!) as easy as building
 finite-state machines.
 
-- **Best of both worlds between declarative and imperative:**
-  Just say what you want to happen instead of how, by declaratively defining
-  your program as a state machine (like [The Elm Architecture]).
-  Unlike Elm, straightforwardly perform side-effects using imperative-like yet
-  referentially transparent syntax.
+- **Best-of-all-worlds...**
+  + **...between declarative and imperative:**
+    Declaratively define a state machine, imperatively perform side-effects.
+  + **...between functional and imperative:**
+    All functions are pure, and the imperative-like syntax is referentially
+    transparent.
+  + **...between dynamic and static typing:**
+    No type annotations. No type declarations. Fully statically typechecked.
 - **X% faster and Y% smaller than React:**
   Instead of virtual DOM diffing, just compile to imperative, mutative
   JavaScript.
-- **Static types, no type annotations:**
-  The benefits of static typing like autocomplete and compile-time error
-  checking, never write a single type annotation.
 - **Fully interoperable:**
   Compile to JavaScript modules that can call or be called by any JS library
   or browser/Node API.
 
-**Status:** First compile and run of Hello World works&mdash;and absolutely
+(Comparisons with: [Elm](#elm), [Flux](#flux), [Redux](#redux), or
+ [Functional Core, Imperative Shell](#functional-core-imperative-shell))
+
+**Status:** First compile and run of Hello World works—and absolutely
 nothing else. Help wanted!
 
 [The Elm Architecture]: https://guide.elm-lang.org/architecture/
@@ -215,6 +218,54 @@ incompatibilities in edge cases that I think JavaScript syntax is confusing:
 [computed]: https://2ality.com/2014/12/es6-oop.html#computed-property-keys
 [method definition]: https://2ality.com/2014/12/es6-oop.html#method-definitions
 [getters or setters]: https://2ality.com/2015/08/object-literals-es5.html#ecmascript-5-has-getters-and-setters
+
+
+## Comparisons
+
+#### Elm
+Like [Elm], Mechanical is statically typed, purely functional, and
+side-effects are referentially transparent because they're represented
+by values called "commands". Unlike Elm, Mechanical uses JavaScript-like
+rather than Haskell-like syntax, including convenient imperative-like
+syntax for commands.
+
+Also, commands can be synchronous, allowing synchronous calls to
+JavaScript, whereas in Elm commands and therefore calls to JavaScript
+are required to be async.
+
+Finally, in Elm, type annotations are optional, but type declarations are
+required for custom types. In Mechanical there are no type declarations
+even for custom types, thanks to scoped hashtags.
+
+[Elm]: https://guide.elm-lang.org/architecture/
+
+#### Flux
+Like [Flux], Mechanical is built around unidirectional data flow.
+Unlike Flux, Mechanical enforces that views and state updates are pure
+functions, and even the imperative-like syntax for side-effects is
+referentially transparent. And all of that—views, state, side-effects—are
+all typechecked without you having to write a single type annotation.
+
+[Flux]: https://facebook.github.io/flux/docs/in-depth-overview
+
+#### Redux
+Like [Redux], Mechanical is built around unidirectional data flow with a
+single source of truth.
+Unlike Redux, Mechanical enforces that reducers and views are pure
+functions, and even the imperative-like syntax for side-effects is
+referentially transparent. And all of that—reducers, views, side-effects—are
+all typechecked without you having to write a single type annotation.
+
+[Redux]: https://redux.js.org/understanding/thinking-in-redux/three-principles
+
+#### Functional Core, Imperative Shell
+Whereas [Functional Core, Imperative Shell] is just a pattern, Mechanical
+enforces a purely functional core model, and the imperative-like syntax
+is referentially transparent. Also, updating the UI needn't be part of the
+imperative shell, instead the UI is expressed declaratively as a pure
+function of state, which is compiled into imperative updates to the UI.
+
+[Functional Core, Imperative Shell]: https://www.destroyallsoftware.com/screencasts/catalog/functional-core-imperative-shell
 
 ## License: Blue Oak or MIT
 
