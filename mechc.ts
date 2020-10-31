@@ -137,8 +137,8 @@ namespace AST {
 }
 
 // who says you can't do left-recursion in a top-down parser? Come at me!
-function leftRecur<Op, BinExpr, ArgExpr extends BinExpr>(
-  argParser: Parser<ArgExpr>,
+function leftRecur<Op, BinExpr>(
+  argParser: Parser<BinExpr>,
   opParser: Parser<Op>,
   map: (op: Op, left: BinExpr, right: BinExpr) => BinExpr
 ): Parser<BinExpr> {
@@ -218,14 +218,14 @@ export function parserAtIndent(indent: string): {
     })
   const ArrayLiteral = s('[').then(
     Expression.thru(sepByOptTrailing(s(',').trim(_))).trim(_)
-    .map<AST.ArrayLiteral>(exprs => ({ type: 'ArrayLiteral', exprs }))
+    .map(exprs => ({ type: 'ArrayLiteral', exprs } as const))
   ).skip(s(']'))
     .desc('array literal (e.g. [ ... ])')
   const RecordLiteral = s('{').then(
     seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
       (key, val) => ({ key, val: val ?? key }))
     .thru(sepByOptTrailing(s(',').trim(_))).trim(_)
-    .map<AST.RecordLiteral>(pairs => ({ type: 'RecordLiteral', pairs }))
+    .map(pairs => ({ type: 'RecordLiteral', pairs } as const))
   ).skip(s('}'))
     .desc('record literal (e.g. { ... })')
 
@@ -242,12 +242,12 @@ export function parserAtIndent(indent: string): {
     ArrayLiteral,
     RecordLiteral,
   )
-  const FieldAccessExpr = alt<AST.Expression>( // (tightest-binding operator)
-    seqMap(PrimaryExpr.skip(s('.').trim(_)), Identifier,
-      (record, fieldName) => ({ type: 'FieldAccessExpr', record, fieldName })),
+  const FieldAccessExpr = alt( // (tightest-binding operator)
+    seqMap(PrimaryExpr.skip(s('.').trim(_)), Identifier, (record, fieldName) =>
+      ({ type: 'FieldAccessExpr', record, fieldName } as const)),
     PrimaryExpr,
   )
-  const CallExpr = alt<AST.Expression>( // as an exception to operator precedence, binds tighter
+  const CallExpr = alt( // as an exception to operator precedence, binds tighter
     seqMap( // leftwards than FieldAccessExpr, because of how '.' is overloaded
       PrimaryExpr.skip(_),
       s('.').then(Identifier.trim(_)).or(succeed(null)),
@@ -256,19 +256,19 @@ export function parserAtIndent(indent: string): {
           (label, arg) => ({ label, arg })).sepBy(s(',').trim(_)).trim(_)
       ).skip(s(')')),
       (expr, infixIdent, args) => infixIdent === null
-        ? { type: 'CallExpr', contextArg: null, func: expr,       args }
-        : { type: 'CallExpr', contextArg: expr, func: infixIdent, args }
+        ? { type: 'CallExpr', contextArg: null, func: expr,       args } as const
+        : { type: 'CallExpr', contextArg: expr, func: infixIdent, args } as const
     ),
     FieldAccessExpr,
   )
-  const UnaryExpr = alt<AST.Expression>(
+  const UnaryExpr = alt(
     seqMap(r(/[-!]/).skip(_) as Parser<'-' | '!'>, CallExpr,
-      (op, arg) => ({ type: 'UnaryExpr', op, arg })),
+      (op, arg) => ({ type: 'UnaryExpr', op, arg } as const)),
     CallExpr,
   )
-  const ExponentExpr = alt<AST.Expression>(
+  const ExponentExpr = alt(
     seqMap(CallExpr.skip(s('**').trim(_)), UnaryExpr,
-      (left, right) => ({ type: 'BinaryExpr', op: '**', left, right })),
+      (left, right) => ({ type: 'BinaryExpr', op: '**', left, right } as const)),
         // Note 1: as a special exception to typical operator precedence,
         // exponents binds equally tightly leftwards as UnaryExpr, to avoid the
         // ambiguity of whether -2**2 is (-2)**2 = 4 or -(2**2) = -4
@@ -286,26 +286,26 @@ export function parserAtIndent(indent: string): {
         // left-associative, e.g. 2/3/4 = (2/3)/4 and not 2/(3/4)
     UnaryExpr,
   )
-  const MultExpr: Parser<AST.Expression> = leftRecur(
+  const MultExpr = leftRecur(
     ExponentExpr, r(/[*/%]/).trim(_) as Parser<'*' | '/' | '%'>,
-    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right } as const)
   )
-  const AddExpr: Parser<AST.Expression> = leftRecur(
+  const AddExpr = leftRecur(
     MultExpr, r(/[+-]/).trim(_) as Parser<'+' | '-'>,
-    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right } as const)
   )
-  const InequalityExpr: Parser<AST.BinaryExpr> = seqMap( // mutually
+  const InequalityExpr = seqMap( // mutually
       // exclusive precedence with other comparisons and cannot be chained,
       // because (1 != 2 != 1) == #yes could be surprising, but anything else
       // would require quadratic comparisons
     AddExpr.skip(s('!=').trim(_)), AddExpr,
-    (left, right) => ({ type: 'BinaryExpr', op: '!=', left, right })
+    (left, right) => ({ type: 'BinaryExpr', op: '!=', left, right } as const)
   )
   const CompareChainExpr: Parser<AST.Expression> = seqMap(
     AddExpr,
     seqMap(
-      seq(s('==' as string).trim(_), AddExpr).many(), // we need to special-case the
-        // leading =='s because alt() requires failure to fall-through to the
+      seq(s<string>('==').trim(_), AddExpr).many(), // we need to special-case
+        // the leading =='s because alt() requires failure to fall-through to the
         // next alternative, and when parsing "a == b > c" the first alternative
         // won't fail, rather it succeeds parsing '== b', but the overall parser
         // then fails on '>'
@@ -324,7 +324,7 @@ export function parserAtIndent(indent: string): {
             op: rest[0][0] as AST.BinaryExpr['op'],
             left: first,
             right: rest[0][1],
-          }
+          } as const
         : ({
             type: 'CompareChainExpr',
             chain: rest.map(([op, arg], i) => ({
@@ -332,22 +332,22 @@ export function parserAtIndent(indent: string): {
               op: op as AST.BinaryExpr['op'],
               left: i ? rest[i-1][1] : first,
               right: arg,
-            })),
+            } as const)),
           })
   )
   const CompareExpr = alt(InequalityExpr, CompareChainExpr)
-  const AndExpr: Parser<AST.Expression> = leftRecur( // conventionally higher
-    CompareExpr, s('&&').trim(_),                    // precedence than OrExpr
-    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+  const AndExpr = leftRecur( // conventionally higher precedence than OrExpr
+    CompareExpr, s('&&').trim(_),
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right } as const)
   )
-  const OrExpr: Parser<AST.Expression> = leftRecur( // conventionally lower
-    AndExpr, s('||').trim(_),                       // precedence than AndExpr
-    (op, left, right) => ({ type: 'BinaryExpr', op, left, right })
+  const OrExpr = leftRecur( // conventionally lower precedence than AndExpr
+    AndExpr, s('||').trim(_),
+    (op, left, right) => ({ type: 'BinaryExpr', op, left, right } as const)
   )
-  const CondExpr = alt<AST.Expression>(
+  const CondExpr = alt(
     seqMap(
       OrExpr.skip(s('?').trim(_)), Expression.skip(s(':').trim(_)), Expression,
-      (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo })
+      (test, ifYes, ifNo) => ({ type: 'CondExpr', test, ifYes, ifNo } as const)
     ),
     OrExpr,
   )
@@ -368,7 +368,7 @@ export function parserAtIndent(indent: string): {
         //       ameliorate any visual ambiguity
       StatementBraceBlock,
     ),
-    (params, body) => ({ type: 'ArrowFunc', params, body })
+    (params, body) => ({ type: 'ArrowFunc', params, body } as const)
   ))
 
 
@@ -377,35 +377,35 @@ export function parserAtIndent(indent: string): {
   // allowed in the body of an event handler declaration, or in a cmd {} block
   //
   const ReturnStmt = s('Return').then(__).then(Expression)
-    .map<AST.ReturnStmt>(expr => ({ type: 'ReturnStmt', expr }))
+    .map(expr => ({ type: 'ReturnStmt', expr } as const))
   const EmitStmt = s('Emit').then(__).then(Expression)
-    .map<AST.EmitStmt>(expr => ({ type: 'EmitStmt', expr }))
+    .map(expr => ({ type: 'EmitStmt', expr } as const))
 
-  const LetStmt: Parser<AST.LetStmt> = seqMap(
+  const LetStmt = seqMap(
     s('Let').then(__).then(Identifier), s('=').trim(_).then(Expression),
-    (varName, expr) => ({ type: 'LetStmt', varName, expr }),
+    (varName, expr) => ({ type: 'LetStmt', varName, expr } as const),
   )
-  const ChangeStmt: Parser<AST.ChangeStmt> = seqMap(
+  const ChangeStmt = seqMap(
     s('Change').then(__).then(Identifier), s('to').trim(_).then(Expression),
-    (varName, expr) => ({ type: 'ChangeStmt', varName, expr })
+    (varName, expr) => ({ type: 'ChangeStmt', varName, expr } as const)
   )
 
   const DoStmt = s('Do').then(__).then(Expression)
-    .map<AST.DoStmt>(expr => ({ type: 'DoStmt', expr }))
-  const GetDoStmt: Parser<AST.GetDoStmt> = seqMap(
+    .map<AST.DoStmt>(expr => ({ type: 'DoStmt', expr } as const))
+  const GetDoStmt = seqMap(
     s('Get').then(__).then(Identifier),
     s('=').trim(_).then(s('Do')).then(_).then(Expression),
-    (varName, expr) => ({ type: 'GetDoStmt', varName, expr })
+    (varName, expr) => ({ type: 'GetDoStmt', varName, expr } as const)
   )
-  const FutureDoStmt: Parser<AST.FutureDoStmt> = seqMap(
+  const FutureDoStmt = seqMap(
     s('Future').then(__).then(Identifier),
     s('=').trim(_).then(s('Do')).then(_).then(Expression),
-    (varName, expr) => ({ type: 'FutureDoStmt', varName, expr })
+    (varName, expr) => ({ type: 'FutureDoStmt', varName, expr } as const)
   )
-  const AfterGotStmt: Parser<AST.AfterGotStmt> = r(/~* *After +got +/).then(
+  const AfterGotStmt = r(/~* *After +got +/).then(
     Identifier.sepBy1(s(',').trim(_))
     .desc('at least one variable required in "After got ..." statement')
-  ).skip(r(/ *~*/)).map(vars => ({ type: 'AfterGotStmt', vars }))
+  ).skip(r(/ *~*/)).map(vars => ({ type: 'AfterGotStmt', vars } as const))
 
   const Statement = alt<AST.Statement>(ReturnStmt, EmitStmt, LetStmt,
     ChangeStmt, DoStmt, GetDoStmt, FutureDoStmt, AfterGotStmt)
@@ -450,16 +450,16 @@ export const parser = parserAtIndent('')
 // Top-Level Declarations
 // all exported
 //
-const StateDecl: Parser<AST.StateDecl> = seqMap(
+const StateDecl = seqMap(
   s('State').then(__).then(Identifier), s('=').trim(_).then(parser.Expression),
-  (varName, expr) => ({ type: 'StateDecl', varName, expr })
+  (varName, expr) => ({ type: 'StateDecl', varName, expr } as const)
 )
-const WhenDecl: Parser<AST.WhenDecl> = seqMap(
+const WhenDecl = seqMap(
   s('When').then(__).then(parser.Expression),
   alt(s('with').trim(__).then(Identifier), succeed(null))
   .skip(_).skip(s(':')).skip(_EOL),
   parser.StatementIndentBlock,
-  (event, varName, body) => ({ type: 'WhenDecl', event, varName, body })
+  (event, varName, body) => ({ type: 'WhenDecl', event, varName, body } as const)
 )
 export const TopLevel =
   alt<AST.TopLevel>(StateDecl, WhenDecl, parser.DoStmt, parser.GetDoStmt)
