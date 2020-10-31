@@ -1,10 +1,27 @@
 import 'mocha'
 import assert from 'assert'
+import fc from 'fast-check'
 import { exec } from 'child_process'
 import { Readable } from 'stream'
 import { Failure } from 'parsimmon'
 
-import { parserAtIndent, parser, TopLevel, ProgramParser, compile } from './mechc'
+import { parserAtIndent, parser, TopLevel, ProgramParser, Types, compile } from './mechc'
+
+import { arb_nontrivial_type, arb_type_pairs, arb_similar_types, perturb_type, isWellFormed } from './test_helpers'
+
+function pre(condition: boolean): asserts condition {
+  // workaround for extremely confusing TypeScript error message:
+  //
+  //     Assertions require every name in the call target to be declared with an explicit type annotation. (TS2775)
+  //
+  // I tried to declare fc.pre or directly-imported pre (meaning
+  // `import {pre} from 'fast-check'`) with with an explicit type
+  // annotation, still kept getting that error message.
+  //
+  // See also https://github.com/microsoft/TypeScript/issues/36931#issuecomment-633659882
+
+  fc.pre(condition)
+}
 
 suite('Parser', () => {
   suite('primary exprs', () => {
@@ -1687,7 +1704,562 @@ suite('ProgramParser', () => {
   })
 })
 
-suite('Compiler', () => {
+suite('Type System', () => {
+  suite.skip('type object generators ("arbitraries")', () => {
+    // this test suite just sanity-checks that the "arbitraries" produce
+    // well-formed type objects
+
+    test('arb_nontrivial_type()', () => fc.assert(
+      fc.property(arb_nontrivial_type(100), T => {
+        return isWellFormed(T)
+      })
+    ))
+
+    test('perturb_type()', () => fc.assert(
+      fc.property(
+        arb_nontrivial_type(100),
+        fc.array(
+          fc.record({
+            str: fc.hexaString({ minLength: 2 }), // reproducible RNGs
+            type: arb_nontrivial_type(5), // randomized type that can be inserted
+          }),
+          { minLength: 10, maxLength: 10},
+        ),
+        (T, rngs) => {
+          const Ts = rngs.map(({str, type}) => {
+            const perturbed = perturb_type(T, str, type)
+            return T = isWellFormed(T) && perturbed
+          })
+          return Ts.every(T => isWellFormed(T))
+        }
+      )
+    ))
+
+    test('arb_similar_types()', () => fc.assert(
+      fc.property(arb_similar_types(10, arb_nontrivial_type(100)), Ts => {
+        return Ts.every(T => isWellFormed(T))
+      })
+    ))
+  })
+
+  const EnumSum = { species: 'Sum', variants: { 'foo': null, 'bar': null }} as const
+
+  const Err =  { species: 'Error', error: EnumSum } as const
+  const bool = { species: 'boolean' } as const
+  const num =  { species: 'number'  } as const
+  const str =  { species: 'string'  } as const
+
+  const nullable = (T: Exclude<Types.NontrivialType, 'None'>) =>
+    ({ ...T, nullable: true as const })
+  const errorable = (T: Exclude<Types.NontrivialType, 'None' | Types.Err>) =>
+    ({ ...T, error: EnumSum })
+  const Arr = (T: Types.NontrivialType) =>
+    ({ species: 'Array', ItemType: T } as const)
+  const Product = (fields: {[name: string]: Types.NontrivialType}) =>
+    ({ species: 'Product', fields } as const)
+  const Sum = (variants: {[tag: string]: Types.NontrivialType | null}) =>
+    ({ species: 'Sum', variants } as const)
+  const FuncUnary = (param: Types.NontrivialType, result: Types.NontrivialType) =>
+    ({ species: 'Function', paramCount: 1, param, result } as const)
+  const FuncBinary = (param1: Types.NontrivialType, param2: Types.NontrivialType, result: Types.NontrivialType, param2Optional?: true) =>
+    ({ species: 'Function', paramCount: 2, param1, param2, result, param2Optional } as const)
+  const FuncNary = (firstParam: Types.NontrivialType, params: Array<[string, Types.NontrivialType, true?]>, result: Types.NontrivialType) =>
+    ({
+      species: 'Function', paramCount: 99, result, firstParam,
+      labels: params.map(([label]) => label),
+      params: params.reduce((p, [label, T]) => ({...p, [label]: T}), {}),
+      optionalCount: params.reduce((n, [_, __, opt]) => n + (+!!opt), 0),
+    } as const)
+
+  // allow `false` because union() can return `false`
+  const assertTypeEqual = (a: Types.Type | false, b: Types.Type | false) =>
+    assert.strictEqual(a && Types.stringify(a), b && Types.stringify(b))
+
+  suite('isSubtype', () => {
+    test('basics', () => {
+      assert(Types.isSubtype('None', nullable(bool)))
+      assert(!Types.isSubtype('None', bool))
+
+      assert(Types.isSubtype(Err, errorable(bool)))
+      assert(!Types.isSubtype(Err, nullable(bool)))
+
+      assert(Types.isSubtype(Arr(bool), Arr(bool)))
+      assert(Types.isSubtype(Arr(bool), Arr(nullable(bool))))
+      assert(Types.isSubtype(Arr(bool), nullable(Arr(bool))))
+      assert(!Types.isSubtype(Arr(nullable(bool)), Arr(bool)))
+
+      assert(Types.isSubtype(
+        Product({ foo: bool, bar: str           }),
+        Product({ foo: bool, bar: nullable(str) })))
+      assert(!Types.isSubtype(
+        Product({ foo: bool, bar: nullable(str) }),
+        Product({ foo: bool, bar: str           })))
+
+      assert(Types.isSubtype(
+        Product({ foo: bool, bar: str }),
+        Product({ foo: bool           })))
+      assert(!Types.isSubtype(
+        Product({ foo: bool           }),
+        Product({ foo: bool, bar: str })))
+
+      assert(Types.isSubtype(
+        Sum({ foo: null, bar: str           }),
+        Sum({ foo: null, bar: nullable(str) })))
+      assert(!Types.isSubtype(
+        Sum({ foo: null, bar: nullable(str) }),
+        Sum({ foo: null, bar: str           })))
+
+      assert(Types.isSubtype(
+        Sum({ foo: bool           }),
+        Sum({ foo: bool, bar: str })))
+      assert(!Types.isSubtype(
+        Sum({ foo: bool, bar: str }),
+        Sum({ foo: bool           })))
+
+      // covariant in return type
+      assert(Types.isSubtype(FuncUnary(num, str), FuncUnary(num, nullable(str))))
+      assert(!Types.isSubtype(FuncUnary(num, nullable(str)), FuncUnary(num, str)))
+      // contravariant in parameter type and optionality
+      assert(Types.isSubtype(FuncUnary(nullable(num), str), FuncUnary(num, str)))
+      assert(!Types.isSubtype(FuncUnary(num, str), FuncUnary(nullable(num), str)))
+      assert(Types.isSubtype(
+        FuncBinary(num, nullable(bool), str),
+        FuncBinary(num, bool,           str)))
+      assert(!Types.isSubtype(
+        FuncBinary(num, bool,           str),
+        FuncBinary(num, nullable(bool), str)))
+      assert(Types.isSubtype(
+        FuncBinary(num, bool, str, true),
+        FuncBinary(num, bool, str)))
+      assert(!Types.isSubtype(
+        FuncBinary(num, bool, str),
+        FuncBinary(num, bool, str, true)))
+      assert(Types.isSubtype(
+        FuncNary(num, [['foo', nullable(bool)]], str),
+        FuncNary(num, [['foo', bool          ]], str)))
+      assert(!Types.isSubtype(
+        FuncNary(num, [['foo', bool          ]], str),
+        FuncNary(num, [['foo', nullable(bool)]], str)))
+      assert(Types.isSubtype(
+        FuncNary(num, [['foo', bool, true]], str),
+        FuncNary(num, [['foo', bool      ]], str)))
+      assert(!Types.isSubtype(
+        FuncNary(num, [['foo', bool      ]], str),
+        FuncNary(num, [['foo', bool, true]], str)))
+
+      // binary with optional argument can be unary
+      assert(Types.isSubtype(FuncBinary(num, bool, str, true), FuncUnary(num, str)))
+      //     TODO: should optional arguments ^^^^ be required to be nullable????
+
+      // unary cannot be binary that ignores arguments
+      assert(!Types.isSubtype(FuncUnary(num, str), FuncBinary(num, bool, str)))
+      assert(!Types.isSubtype(FuncUnary(num, str), FuncBinary(num, bool, str, true)))
+
+      // n-ary with all optional arguments can be unary
+      assert(Types.isSubtype(
+        FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+        FuncUnary(num, str)))
+      assert(!Types.isSubtype(
+        FuncUnary(num, str),
+        FuncNary(num, [['foo', bool, true], ['bar', num, true]], str)))
+
+      // order of labeled parameters matters (for now)
+      assert(!Types.isSubtype(
+        FuncNary(num, [['foo', bool], ['bar', num ]], str),
+        FuncNary(num, [['bar', num ], ['foo', bool]], str)))
+
+      // optionals can be dropped from the end
+      assert(Types.isSubtype(
+        FuncNary(num, [['foo', bool], ['bar', num, true]], str),
+        FuncNary(num, [['foo', bool]], str)))
+      assert(!Types.isSubtype(
+        FuncNary(num, [['foo', bool]], str),
+        FuncNary(num, [['foo', bool], ['bar', num, true]], str)))
+
+      // but because order matters, they can't be dropped in the middle
+      assert(!Types.isSubtype(
+        FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+        FuncNary(num, [['bar', num]], str)))
+    })
+
+    suite('partial ordering axioms', () => {
+      test('reflexivity', () => fc.assert(
+        fc.property(arb_nontrivial_type(3), A => {
+          return Types.isSubtype(A, A)
+        })
+      ))
+
+      test('antisymmetry', () => fc.assert(fc.property(
+        arb_type_pairs(arb_nontrivial_type(100),
+          (T, U) => {
+            if (Types.isSubtype(T, U) && Types.isSubtype(U, T)) {
+              return [T, U] as const
+            }
+          }),
+        pairs => {
+          for (const [A, B] of pairs) {
+            if (Types.stringify(A) !== Types.stringify(B)) {
+              assert.fail(`Two types are subtypes of each other, but not equal:\n  ${Types.stringify(A)}\n  ${Types.stringify(B)}`)
+            }
+          }
+        },
+      )))
+
+      test('transitivity', () => fc.assert(fc.property(
+        arb_similar_types(30, arb_nontrivial_type(100)), Ts => {
+          const strs = Ts.map(Types.stringify)
+
+          const isSubtype: boolean[] = new Array(Ts.length * Ts.length)
+          for (let i = 0; i < Ts.length; i += 1) {
+            for (let j = 0; j < Ts.length; j += 1) {
+              isSubtype[i*Ts.length + j] = Types.isSubtype(Ts[i], Ts[j])
+            }
+          }
+
+          const triples: Types.NontrivialType[][] = []
+          for (let i = 0; i < Ts.length - 2; i += 1) {
+            for (let j = i + 1; j < Ts.length - 1; j += 1) {
+              if (strs[i] === strs[j]) continue
+              let a: number, b: number
+              if      (isSubtype[i*Ts.length + j]) [a, b] = [i, j]
+              else if (isSubtype[j*Ts.length + i]) [a, b] = [j, i]
+              else continue
+              for (let k = j + 1; k < Ts.length; k += 1) {
+                if (strs[i] === strs[k] || strs[j] === strs[k]) continue
+                let c: number
+                if      (isSubtype[b*Ts.length + k]) c = k
+                else if (isSubtype[k*Ts.length + a]) [a, b, c] = [k, a, b]
+                else continue
+                triples.push([Ts[a], Ts[b], Ts[c]])
+              }
+            }
+          }
+          pre(triples.length > 0)
+          for (const [A, B, C] of triples) {
+            if (!Types.isSubtype(A, C)) {
+              assert.fail(`Not transitive:\n${Types.stringify(A)}\n${Types.stringify(B)}\n${Types.stringify(C)}`)
+            }
+          }
+        }
+      )))
+    })
+  })
+
+  suite('union and intersect', () => {
+    test('union basics', () => {
+      assertTypeEqual(Types.union(str, 'None'), nullable(str))
+      assertTypeEqual(Types.union(Err, 'None'), nullable(Err))
+      assertTypeEqual(Types.union(Arr(str), 'None'), nullable(Arr(str)))
+
+      assert.strictEqual(Types.union(str, bool), false)
+      assert.strictEqual(Types.union(str, Arr(str)), false)
+
+      const ProdXY = Product({ x: bool, y: num })
+      const ProdXZ = Product({ x: bool, z: str })
+      const ProdX  = Product({ x: bool })
+      assertTypeEqual(Types.union(ProdXY, ProdXZ), ProdX)
+
+      const EnumFoo  = Sum({ foo: null })
+      const EnumBar  = Sum({ bar: null })
+      assertTypeEqual(Types.union(EnumFoo, EnumBar), EnumSum)
+
+      // can't union incompatible sum types
+      const SumFooNum = Sum({ foo: num })
+      const SumFooStr = Sum({ foo: str })
+      assert.strictEqual(Types.union(SumFooNum, EnumFoo  ), false)
+      assert.strictEqual(Types.union(SumFooNum, SumFooStr), false)
+
+      // covariant in return type
+      assertTypeEqual(
+        Types.union(FuncUnary(num, str), FuncUnary(num, nullable(str))),
+        FuncUnary(num, nullable(str)))
+      // contravariant in parameter type and optionality
+      assertTypeEqual(
+        Types.union(FuncUnary(num, str), FuncUnary(nullable(num), str)),
+        FuncUnary(num, str))
+      assertTypeEqual(
+        Types.union(
+          FuncBinary(num, bool, str),
+          FuncBinary(num, bool, str, true)),
+        FuncBinary(num, bool, str))
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool, true]], str),
+          FuncNary(num, [['foo', bool      ]], str)),
+        FuncNary(num, [['foo', bool]], str))
+
+      // binary with optional argument can be unioned with unary
+      assertTypeEqual(
+        Types.union(
+          FuncBinary(num, bool, str, true),
+          FuncUnary(num, str)),
+        FuncUnary(num, str))
+
+      // n-ary with all optional arguments can be unioned with unary
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+          FuncUnary(num, str)),
+        FuncUnary(num, str))
+
+      // optionals can be dropped from the end
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool]], str)),
+        FuncNary(num, [['foo', bool]], str))
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool]], str)),
+        FuncNary(num, [['foo', bool]], str))
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool, true]], str)),
+        FuncNary(num, [['foo', bool, true]], str))
+    })
+
+    test('returns well-formed type objects', () => {
+      function assertWellFormedUnionAndIntersect(A: Types.NontrivialType, B: Types.NontrivialType) {
+        const U = Types.union(A, B)
+        if (!U) {
+          if (U !== false) {
+            assert.fail('The only valid falsy result of union(A, B)'
+              + ' is `false`, but got: ' + U + '\n'
+              + 'A = ' + Types.stringify(A) + '\n'
+              + 'B = ' + Types.stringify(B) + '\n'
+              + 'A (JSON): ' + JSON.stringify(A, null, 2) + '\n'
+              + 'B (JSON): ' + JSON.stringify(B, null, 2))
+          }
+        }
+        else {
+          assert(isWellFormed(U, () => ({
+            A: Types.stringify(A),
+            B: Types.stringify(B),
+            A_json: A,
+            B_json: B,
+          })))
+        }
+
+        const I = Types.intersect(A, B)
+        assert(isWellFormed(I, () => ({
+          A: Types.stringify(A),
+          B: Types.stringify(B),
+          A_json: A,
+          B_json: B,
+        })))
+      }
+      fc.assert(fc.property(
+        arb_nontrivial_type(100), arb_nontrivial_type(100), (A, B) => {
+          assertWellFormedUnionAndIntersect(A, B)
+        }
+      ))
+      fc.assert(fc.property(
+        arb_similar_types(30, arb_nontrivial_type(100)), Ts => {
+          for (let i = 0; i < Ts.length - 1; i += 1) {
+            for (let j = i + 1; j < Ts.length; j += 1) {
+              assertWellFormedUnionAndIntersect(Ts[i], Ts[j])
+            }
+          }
+        }
+      ))
+    })
+
+    test('union/intersect with subtype/supertype is identity (if A ⊆ B, then A ∪ B = B and A ∩ B = A)', () =>
+      fc.assert(fc.property(
+        arb_type_pairs(arb_nontrivial_type(100),
+          (T, U) => {
+            if (Types.isSubtype(T, U)) return [T, U] as const
+            if (Types.isSubtype(U, T)) return [U, T] as const
+          }),
+        pairs => {
+          for (const [A, B] of pairs) {
+            const U = Types.union(B, A)
+            if (!U || Types.stringify(U) !== Types.stringify(B)) {
+              assert.fail('A ⊆ B, but A ∪ B ≠ B\n'
+                + `A     = ${Types.stringify(A)}\n`
+                + `B     = ${Types.stringify(B)}\n`
+                + `A ∪ B = ${U && Types.stringify(U)}`)
+            }
+
+            const I = Types.intersect(A, B)
+            if (Types.stringify(I) !== Types.stringify(A)) {
+              assert.fail('A ⊆ B, but A ∩ B ≠ A\n'
+                + `A     = ${Types.stringify(A)}\n`
+                + `B     = ${Types.stringify(B)}\n`
+                + `A ∩ B = ${I && Types.stringify(I)}`)
+            }
+          }
+        },
+      ))
+    )
+
+    test('union is least upper bound (supremum)', () => fc.assert(
+      fc.property(arb_similar_types(30, arb_nontrivial_type(100)), Ts => {
+        const unionsAndAbove: {A: Types.NontrivialType, B: Types.NontrivialType, U: Types.NontrivialType, above: Types.NontrivialType[]}[] = []
+        for (let i = 0; i < Ts.length - 1; i += 1) {
+          for (let j = i + 1; j < Ts.length; j += 1) {
+            const [A, B] = [Ts[i], Ts[j]]
+            const U = Types.union(A, B)
+            if (!U) continue
+            const above = Ts.filter(T =>
+              Types.isSubtype(A, T) && Types.isSubtype(B, T))
+            if (above.length > 1) unionsAndAbove.push({ A, B, U, above })
+          }
+        }
+        pre(unionsAndAbove.length > 0)
+        for (const { A, B, U, above } of unionsAndAbove) {
+          for (const T of above) {
+            if (!Types.isSubtype(U, T)) {
+              assert.fail('T is a supertype of both A and B, but not of A ∪ B:\n'
+                + `A     = ${Types.stringify(A)}\n`
+                + `B     = ${Types.stringify(B)}\n`
+                + `A ∪ B = ${Types.stringify(U)}\n`
+                + `T     = ${Types.stringify(T)}`)
+            }
+          }
+        }
+      })
+    ))
+
+    test('intersection is greatest lower bound (infimum)', () => fc.assert(
+      fc.property(arb_similar_types(30, arb_nontrivial_type(100)), Ts => {
+        const intersectsAndBelow: {A: Types.NontrivialType, B: Types.NontrivialType, I: Types.NontrivialType, below: Types.NontrivialType[]}[] = []
+        for (let i = 0; i < Ts.length - 1; i += 1) {
+          for (let j = i + 1; j < Ts.length; j += 1) {
+            const [A, B] = [Ts[i], Ts[j]]
+            const I = Types.intersect(A, B)
+            if (I === 'Nothing') continue
+            const below = Ts.filter(T =>
+              Types.isSubtype(T, A) && Types.isSubtype(T, B))
+            if (below.length > 1) intersectsAndBelow.push({ A, B, I, below })
+          }
+        }
+        pre(intersectsAndBelow.length > 0)
+        for (const { A, B, I, below } of intersectsAndBelow) {
+          for (const T of below) {
+            if (!Types.isSubtype(T, I)) {
+              assert.fail('T is a subtype of both A and B, but not of A ∩ B:\n'
+                + `A     = ${Types.stringify(A)}\n`
+                + `B     = ${Types.stringify(B)}\n`
+                + `A ∩ B = ${Types.stringify(I)}\n`
+                + `T     = ${Types.stringify(T)}`)
+            }
+          }
+        }
+      })
+    ))
+
+    suite('partial lattice join and meet axioms', () => {
+      // only a partial lattice because not all pairs of types
+      // have a union, e.g. there's no union of string and number.
+      // All pairs of types have an intersect, though, so our
+      // type system is valid meet semi-lattice (lower semi-lattice)
+      // https://en.wikipedia.org/wiki/Join_and_meet
+      // https://en.wikipedia.org/wiki/Lattice_(order)#General_lattice
+
+      test('idempotence', () => fc.assert(
+        fc.property(arb_nontrivial_type(100), T => {
+          assertTypeEqual(T, Types.union(T, T))
+          assertTypeEqual(T, Types.intersect(T, T))
+        })
+      ))
+
+      test('commutativity', () => fc.assert(fc.property(
+        arb_type_pairs(arb_nontrivial_type(100), (A, B) => [A, B] as const),
+        pairs => {
+          for (const [A, B] of pairs) {
+            assertTypeEqual(Types.union(A, B), Types.union(B, A))
+            assertTypeEqual(Types.intersect(A, B), Types.intersect(B, A))
+          }
+        },
+      )))
+
+      test('associativity', () => fc.assert(fc.property(
+        arb_similar_types(25, arb_nontrivial_type(100)), Ts => {
+          const width = Ts.length - 1
+          const unions: (Types.NontrivialType | false)[]         = new Array(width * Ts.length)
+          const intersects: (Types.NontrivialType | 'Nothing')[] = new Array(width * Ts.length)
+          for (let i = 0; i < width; i += 1) {
+            for (let j = i + 1; j < Ts.length; j += 1) {
+              unions[i*width + j] = Types.union(Ts[i], Ts[j])
+              intersects[i*width + j] = Types.intersect(Ts[i], Ts[j])
+            }
+          }
+          for (let i = 0; i < Ts.length - 2; i += 1) {
+            for (let j = i + 1; j < Ts.length - 1; j += 1) {
+              for (let k = j + 1; k < Ts.length; k += 1) {
+                const A = Ts[i]
+                const C = Ts[k]
+                const AuB = unions[i*width + j]
+                const BuC = unions[j*width + k]
+                if (AuB && BuC) {
+                  const AuB_uC = Types.union(AuB, C)
+                  const Au_BuC = Types.union(A, BuC)
+                  const str_AuB_uC = AuB_uC && Types.stringify(AuB_uC)
+                  const str_Au_BuC = Au_BuC && Types.stringify(Au_BuC)
+                  if (str_AuB_uC !== str_Au_BuC) {
+                    assert.fail('Non-associativity: (A ∪ B) ∪ C ≠ A ∪ (B ∪ C)\n'
+                      + `          A = ${Types.stringify(A)}\n`
+                      + `          B = ${Types.stringify(Ts[j])}\n`
+                      + `          C = ${Types.stringify(C)}\n`
+                      + `      A ∪ B = ${Types.stringify(AuB)}\n`
+                      + `      B ∪ C = ${Types.stringify(BuC)}\n`
+                      + `(A ∪ B) ∪ C = ${str_AuB_uC}\n`
+                      + `A ∪ (B ∪ C) = ${str_Au_BuC}\n`
+                      + '\n'
+                      + `A (JSON): ${JSON.stringify(A,     null, 2)}\n`
+                      + `B (JSON): ${JSON.stringify(Ts[j], null, 2)}\n`
+                      + `C (JSON): ${JSON.stringify(C,     null, 2)}\n`)
+                  }
+                }
+                const AnB = intersects[i*width + j]
+                const BnC = intersects[j*width + k]
+                const AnB_nC = Types.intersect(AnB, C)
+                const An_BnC = Types.intersect(A, BnC)
+                const str_AnB_nC = Types.stringify(AnB_nC)
+                const str_An_BnC = Types.stringify(An_BnC)
+                if (str_AnB_nC !== str_An_BnC) {
+                  assert.fail('Non-associativity: (A ∩ B) ∩ C ≠ A ∩ (B ∩ C)\n'
+                    + `          A = ${Types.stringify(A)}\n`
+                    + `          B = ${Types.stringify(Ts[j])}\n`
+                    + `          C = ${Types.stringify(C)}\n`
+                    + `      A ∩ B = ${Types.stringify(AnB)}\n`
+                    + `      B ∩ C = ${Types.stringify(BnC)}\n`
+                    + `(A ∩ B) ∩ C = ${str_AnB_nC}\n`
+                    + `A ∩ (B ∩ C) = ${str_An_BnC}\n`
+                    + '\n'
+                    + `A (JSON): ${JSON.stringify(A,     null, 2)}\n`
+                    + `B (JSON): ${JSON.stringify(Ts[j], null, 2)}\n`
+                    + `C (JSON): ${JSON.stringify(C,     null, 2)}\n`)
+                }
+              }
+            }
+          }
+        }
+      )))
+
+      test('absorpion', () => fc.assert(fc.property(
+        arb_type_pairs(arb_nontrivial_type(100), (A, B) => [A, B] as const),
+        pairs => {
+          for (const [A, B] of pairs) {
+            const U = Types.union(A, B)
+            const I = Types.intersect(A, B)
+            if (U) {
+              assertTypeEqual(Types.intersect(A, U), A)
+              assertTypeEqual(Types.intersect(B, U), B)
+            }
+            assertTypeEqual(Types.union(A, I), A)
+            assertTypeEqual(Types.union(B, I), B)
+          }
+        }
+      )))
+    })
+  })
+})
+
+suite('Compile & Run', () => {
   test('basic program', async () => {
     const observed = compile(
         'Mechanical v0.0.1\n'
