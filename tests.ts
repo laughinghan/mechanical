@@ -1966,8 +1966,12 @@ suite('Type System', () => {
       // can't union incompatible sum types
       const SumFooNum = Sum({ foo: num })
       const SumFooStr = Sum({ foo: str })
-      assert.strictEqual(Types.union(SumFooNum, EnumFoo  ), false)
       assert.strictEqual(Types.union(SumFooNum, SumFooStr), false)
+      assert.strictEqual(Types.union(SumFooNum, EnumFoo  ), false)
+
+      // unioning two function types means using one signature to call
+      // either of two functions
+      // E.g. Let f = (cond ? foo : bar); f(a, thing: b, another: c)
 
       // covariant in return type
       assertTypeEqual(
@@ -2018,6 +2022,95 @@ suite('Type System', () => {
           FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
           FuncNary(num, [['foo', bool, true]], str)),
         FuncNary(num, [['foo', bool, true]], str))
+      assertTypeEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool], ['qux', num, true]], str)),
+        FuncNary(num, [['foo', bool]], str))
+      assert.strictEqual(
+        Types.union(
+          FuncNary(num, [['foo', bool], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool], ['qux', num      ]], str)),
+        false)
+    })
+
+    test('intersect basics', () => {
+      assertTypeEqual(Types.intersect(nullable(str), str), str)
+      assertTypeEqual(Types.intersect(nullable(str), 'None'), 'None')
+      assertTypeEqual(Types.intersect(errorable(str), Err), Err)
+      assertTypeEqual(Types.intersect(Arr(nullable(str)), Arr(str)), Arr(str))
+
+      assertTypeEqual(Types.intersect(str, 'None'), 'Nothing')
+      assertTypeEqual(Types.intersect(str, bool), 'Nothing')
+      assertTypeEqual(Types.intersect(str, Arr(str)), 'Nothing')
+
+      const ProdXY  = Product({ x: bool, y: num })
+      const ProdXZ  = Product({ x: bool, z: str })
+      const ProdXYZ = Product({ x: bool, y: num, z: str })
+      assertTypeEqual(Types.intersect(ProdXY, ProdXZ), ProdXYZ)
+
+      const EnumFoo  = Sum({ foo: null })
+      const EnumBar  = Sum({ bar: null })
+      assertTypeEqual(Types.intersect(EnumFoo, EnumSum), EnumFoo)
+      assertTypeEqual(Types.intersect(EnumFoo, EnumBar), 'Nothing')
+
+      const SumFooNum = Sum({ foo: num })
+      const SumFooStr = Sum({ foo: str })
+      assertTypeEqual(Types.intersect(SumFooNum, SumFooStr), 'Nothing')
+      assertTypeEqual(Types.intersect(SumFooNum, EnumFoo  ), 'Nothing')
+
+      // intersecting two function types means calling one function using
+      // either of two signatures, e.g. cond ? foo(a) : foo(b, c)
+
+      // covariant in return type
+      assertTypeEqual(
+        Types.intersect(FuncUnary(num, str), FuncUnary(num, nullable(str))),
+        FuncUnary(num, str))
+      // contravariant in parameter type and optionality
+      assertTypeEqual(
+        Types.intersect(FuncUnary(num, str), FuncUnary(nullable(num), str)),
+        FuncUnary(nullable(num), str))
+      assertTypeEqual(
+        Types.intersect(
+          FuncBinary(num, bool, str),
+          FuncBinary(num, bool, str, true)),
+        FuncBinary(num, bool, str, true))
+      assertTypeEqual(
+        Types.intersect(
+          FuncNary(num, [['foo', bool, true]], str),
+          FuncNary(num, [['foo', bool      ]], str)),
+        FuncNary(num, [['foo', bool, true]], str))
+
+      // binary with optional argument can be intersected with unary
+      assertTypeEqual(
+        Types.intersect(
+          FuncBinary(num, bool, str, true),
+          FuncUnary(num, str)),
+        FuncBinary(num, bool, str, true))
+
+      // n-ary with all optional arguments can be intersected with unary
+      assertTypeEqual(
+        Types.intersect(
+          FuncNary(num, [['foo', bool, true], ['bar', num, true]], str),
+          FuncUnary(num, str)),
+        FuncNary(num, [['foo', bool, true], ['bar', num, true]], str))
+
+      // optionals can be created at the end
+      assertTypeEqual(
+        Types.intersect(
+          FuncNary(num, [['foo', bool], ['bar', num]], str),
+          FuncNary(num, [['foo', bool]], str)),
+        FuncNary(num, [['foo', bool], ['bar', num, true]], str))
+      assertTypeEqual(
+        Types.intersect(
+          FuncNary(num, [['foo', bool], ['bar', num]], str),
+          FuncNary(num, [['foo', bool, true]], str)),
+        FuncNary(num, [['foo', bool, true], ['bar', num, true]], str))
+      assertTypeEqual(
+        Types.intersect(
+          FuncNary(num, [['foo', bool], ['bar', num, true]], str),
+          FuncNary(num, [['foo', bool], ['qux', num, true]], str)),
+        'Nothing')
     })
 
     test('returns well-formed type objects', () => {
