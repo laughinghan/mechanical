@@ -1595,7 +1595,12 @@ suite('Compile & Run', () => {
         '// runtime:\n'
       + 'const console_log = (...args) => () => console.log(...args);\n'
       + '\n'
+      + '// State declarations: (TODO)\n'
+      + '\n'
+      + '// initializing statements:\n'
       + 'console_log("hello, world")();\n'
+      + '\n'
+      + '// When declarations: (TODO)\n'
     assert.strictEqual(observed, expected)
 
     const observedRun = await new Promise((resolve, reject) => {

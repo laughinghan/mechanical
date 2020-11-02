@@ -1375,14 +1375,16 @@ export function compile(source: string) {
     js += `const ${name} = ${topLevelScope[name]};\n`
     topLevelContext.scope[name] = name
   }
-  js += '\n'
 
-  // TODO: compile State declarations
+  js += '\n// State declarations: (TODO)\n'
 
-  // compile statements
-  for (const statement of statements) js += codegenStmt(topLevelContext, statement)
+  js += '\n// initializing statements:\n'
+  for (const statement of statements) {
+    js += codegenStmt(topLevelContext, statement)
+  }
 
-  // TODO: compile When declarations
+  js += '\n// When declarations: (TODO)\n'
+
   return js
 }
 
