@@ -22,7 +22,11 @@ export namespace AST {
   export type Expression = PrimaryExpr | FieldAccessExpr | CallExpr | UnaryExpr
     | BinaryExpr | CompareChainExpr | CondExpr | ArrowFunc
 
-  export type PrimaryExpr = string | ArrayLiteral | RecordLiteral
+  export type PrimaryExpr = string | Variable | ArrayLiteral | RecordLiteral
+  export interface Variable {
+    type: 'Variable'
+    name: string
+  }
   export interface ArrayLiteral {
     type: 'ArrayLiteral'
     exprs: Expression[]
@@ -193,6 +197,7 @@ export function parserAtIndent(indent: string): {
   const Expression: Parser<AST.Expression> = lazy(() => alt(ArrowFunc, CondExpr))
 
   const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
+  const Variable = Identifier.map(name => ({ type: 'Variable', name } as const))
   const Numeral = r(/\d(?:\d|_\d)*/).desc('numeral (e.g. 123, 9_000)') // TODO decimals, exponential notation
   const FieldFunc = s('.').then(Identifier).map(name => '.' + name)
     .desc('field access function (e.g. .field_name)')
@@ -223,7 +228,7 @@ export function parserAtIndent(indent: string): {
     .desc('array literal (e.g. [ ... ])')
   const RecordLiteral = s('{').then(
     seqMap(Identifier, alt(s(':').trim(_).then(Expression), succeed(null)),
-      (key, val) => ({ key, val: val ?? key }))
+      (key, val) => ({ key, val: val ?? { type: 'Variable', name: key } }))
     .thru(sepByOptTrailing(s(',').trim(_))).trim(_)
     .map(pairs => ({ type: 'RecordLiteral', pairs } as const))
   ).skip(s('}'))
@@ -235,7 +240,7 @@ export function parserAtIndent(indent: string): {
       // array literals, record literals, function calls, anonymous functions).
       // They are the operands to the tightest-binding operator
     ParenGroup,
-    Identifier,
+    Variable,
     Numeral,
     FieldFunc,
     StringLiteral,
@@ -255,9 +260,13 @@ export function parserAtIndent(indent: string): {
         seqMap(Identifier.skip(s(':').trim(_)).or(succeed(null)), Expression,
           (label, arg) => ({ label, arg })).sepBy(s(',').trim(_)).trim(_)
       ).skip(s(')')),
-      (expr, infixIdent, args) => infixIdent === null
-        ? { type: 'CallExpr', contextArg: null, func: expr,       args } as const
-        : { type: 'CallExpr', contextArg: expr, func: infixIdent, args } as const
+      (expr, infixIdent, args) => ({
+        type: 'CallExpr',
+        contextArg: (infixIdent === null ? null : expr),
+        func:       (infixIdent === null ? expr
+                      : { type: 'Variable', name: infixIdent } as const),
+        args,
+      } as const)
     ),
     FieldAccessExpr,
   )
