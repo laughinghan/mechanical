@@ -24,61 +24,61 @@ export namespace AST {
 
   export type PrimaryExpr = string | Variable | ArrayLiteral | RecordLiteral
   export interface Variable {
-    type: 'Variable'
-    name: string
+    readonly type: 'Variable'
+    readonly name: string
   }
   export interface ArrayLiteral {
-    type: 'ArrayLiteral'
-    exprs: Expression[]
+    readonly type: 'ArrayLiteral'
+    readonly exprs: readonly Expression[]
   }
   export interface RecordLiteral {
-    type: 'RecordLiteral'
-    pairs: Array<{
-      key: string
-      val: Expression
+    readonly type: 'RecordLiteral'
+    readonly pairs: ReadonlyArray<{
+      readonly key: string
+      readonly val: Expression
     }>
   }
 
   export interface FieldAccessExpr {
-    type: 'FieldAccessExpr'
-    record: Expression
-    fieldName: string
+    readonly type: 'FieldAccessExpr'
+    readonly record: Expression
+    readonly fieldName: string
   }
   export interface CallExpr {
-    type: 'CallExpr'
-    contextArg: Expression | null
-    func: Expression
-    args: Array<{
-      label: string | null
-      arg: Expression
+    readonly type: 'CallExpr'
+    readonly contextArg: Expression | null
+    readonly func: Expression
+    readonly args: ReadonlyArray<{
+      readonly label: string | null
+      readonly arg: Expression
     }>
   }
   export interface UnaryExpr {
-    type: 'UnaryExpr'
-    op: '-' | '!'
-    arg: Expression
+    readonly type: 'UnaryExpr'
+    readonly op: '-' | '!'
+    readonly arg: Expression
   }
   export interface BinaryExpr {
-    type: 'BinaryExpr'
-    op: '**' | '*' | '/' | '%' | '+' | '-' | '!=' | '==' | '<' | '>' | '<='
+    readonly type: 'BinaryExpr'
+    readonly op: '**' | '*' | '/' | '%' | '+' | '-' | '!=' | '==' | '<' | '>' | '<='
       | '>=' | '&&' | '||' // in order of precedence
-    left: Expression
-    right: Expression
+    readonly left: Expression
+    readonly right: Expression
   }
   export interface CompareChainExpr {
-    type: 'CompareChainExpr'
-    chain: BinaryExpr[]
+    readonly type: 'CompareChainExpr'
+    readonly chain: readonly BinaryExpr[]
   }
   export interface CondExpr {
-    type: 'CondExpr'
-    test: Expression
-    ifYes: Expression
-    ifNo: Expression
+    readonly type: 'CondExpr'
+    readonly test: Expression
+    readonly ifYes: Expression
+    readonly ifNo: Expression
   }
   export interface ArrowFunc {
-    type: 'ArrowFunc'
-    params: string[]
-    body: Expression | Statement[]
+    readonly type: 'ArrowFunc'
+    readonly params: readonly string[]
+    readonly body: Expression | readonly Statement[]
   }
 
 
@@ -86,55 +86,55 @@ export namespace AST {
     | DoStmt | GetDoStmt | FutureDoStmt | AfterGotStmt
 
   export interface ReturnStmt {
-    type: 'ReturnStmt'
-    expr: Expression
+    readonly type: 'ReturnStmt'
+    readonly expr: Expression
   }
   export interface EmitStmt {
-    type: 'EmitStmt'
-    expr: Expression
+    readonly type: 'EmitStmt'
+    readonly expr: Expression
   }
 
   export interface LetStmt {
-    type: 'LetStmt'
-    varName: string
-    expr: Expression
+    readonly type: 'LetStmt'
+    readonly varName: string
+    readonly expr: Expression
   }
   export interface ChangeStmt {
-    type: 'ChangeStmt'
-    varName: string
-    expr: Expression
+    readonly type: 'ChangeStmt'
+    readonly varName: string
+    readonly expr: Expression
   }
 
   export interface DoStmt {
-    type: 'DoStmt'
-    expr: Expression
+    readonly type: 'DoStmt'
+    readonly expr: Expression
   }
   export interface GetDoStmt {
-    type: 'GetDoStmt'
-    varName: string
-    expr: Expression
+    readonly type: 'GetDoStmt'
+    readonly varName: string
+    readonly expr: Expression
   }
   export interface FutureDoStmt {
-    type: 'FutureDoStmt'
-    varName: string
-    expr: Expression
+    readonly type: 'FutureDoStmt'
+    readonly varName: string
+    readonly expr: Expression
   }
   export interface AfterGotStmt {
-    type: 'AfterGotStmt'
-    vars: string[]
+    readonly type: 'AfterGotStmt'
+    readonly vars: readonly string[]
   }
 
 
   export interface StateDecl {
-    type: 'StateDecl'
-    varName: string
-    expr: Expression
+    readonly type: 'StateDecl'
+    readonly varName: string
+    readonly expr: Expression
   }
   export interface WhenDecl {
-    type: 'WhenDecl'
-    event: Expression
-    varName: string | null
-    body: Statement[]
+    readonly type: 'WhenDecl'
+    readonly event: Expression
+    readonly varName: string | null
+    readonly body: readonly Statement[]
   }
 
   export type TopLevel = StateDecl | WhenDecl | DoStmt | GetDoStmt
