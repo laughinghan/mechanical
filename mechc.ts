@@ -1318,25 +1318,34 @@ export namespace Types {
 //
 // Codegen: AST -> JS text
 //
-function codegenExpr(scope: {[k: string]: string}, expr: AST.Expression): string {
+interface Context {
+  indent: string
+  scope: { [name: string]: string }
+}
+
+function codegenExpr(ctx: Context, expr: AST.Expression): string {
   if (typeof expr === 'string') {
     // TODO: field access functions, escaping line terminators in string literals
     return expr
   }
   switch (expr.type) {
+    case 'Variable':
+        return ctx.scope[expr.name]
     case 'CallExpr':
       if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
-      return `${codegenExpr(scope, expr.func)}(${
-        expr.args.map(({arg}) => codegenExpr(scope, arg)).join(', ')})`
+      return `${codegenExpr(ctx, expr.func)}(${
+        expr.args.map(({arg}) => codegenExpr(ctx, arg)).join(', ')})`
     default:
       throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
   }
 }
 
-function codegenStmt(scope: {[k: string]: string}, stmt: AST.Statement) {
+function codegenStmt(ctx: Context, stmt: AST.Statement): string {
   switch (stmt.type) {
     case 'DoStmt':
-      return `${codegenExpr(scope, stmt.expr)}();\n`
+      return `${codegenExpr(ctx, stmt.expr)}();\n`
+    default:
+      throw 'Unexpected or not-yet-implemented statement type: ' + stmt.type
   }
 }
 
@@ -1353,22 +1362,25 @@ export function compile(source: string) {
     else statements.push(topLevel)
   }
 
-  let js = ''
-  const topLevelScope: {[k: string]: string} = {
+  const topLevelContext: Context = {
+    indent: '',
+    scope: {},
+  }
+  const topLevelScope: {[name: string]: string} = {
     console_log: '(...args) => () => console.log(...args)'
   }
 
-  // runtime
-  js += '// runtime:\n'
+  let js = '// runtime:\n'
   for (const name in topLevelScope) {
     js += `const ${name} = ${topLevelScope[name]};\n`
+    topLevelContext.scope[name] = name
   }
   js += '\n'
 
   // TODO: compile State declarations
 
   // compile statements
-  for (const statement of statements) js += codegenStmt(topLevelScope, statement)
+  for (const statement of statements) js += codegenStmt(topLevelContext, statement)
 
   // TODO: compile When declarations
   return js
