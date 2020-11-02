@@ -18,7 +18,7 @@ import {
 // Parser
 //
 
-namespace AST {
+export namespace AST {
   export type Expression = PrimaryExpr | FieldAccessExpr | CallExpr | UnaryExpr
     | BinaryExpr | CompareChainExpr | CondExpr | ArrowFunc
 
