@@ -898,7 +898,7 @@ export namespace Types {
         //             { x: "x", a: #none, b: ""}
         //         Depending on `predicate`.
         //
-        // This might make compilation more complex? But maybe not compared
+        // This might make codegen more complex? But maybe not compared
         // to what it'll take to support unordered params anyway.
         //
         // TODO: open a discussion ticket
@@ -1316,9 +1316,9 @@ export namespace Types {
 
 
 //
-// Compilation: AST -> JS text
+// Codegen: AST -> JS text
 //
-function compileExpr(scope: {[k: string]: string}, expr: AST.Expression): string {
+function codegenExpr(scope: {[k: string]: string}, expr: AST.Expression): string {
   if (typeof expr === 'string') {
     // TODO: field access functions, escaping line terminators in string literals
     return expr
@@ -1326,17 +1326,17 @@ function compileExpr(scope: {[k: string]: string}, expr: AST.Expression): string
   switch (expr.type) {
     case 'CallExpr':
       if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
-      return `${compileExpr(scope, expr.func)}(${
-        expr.args.map(({arg}) => compileExpr(scope, arg)).join(', ')})`
+      return `${codegenExpr(scope, expr.func)}(${
+        expr.args.map(({arg}) => codegenExpr(scope, arg)).join(', ')})`
     default:
       throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
   }
 }
 
-function compileStmt(scope: {[k: string]: string}, stmt: AST.Statement) {
+function codegenStmt(scope: {[k: string]: string}, stmt: AST.Statement) {
   switch (stmt.type) {
     case 'DoStmt':
-      return `${compileExpr(scope, stmt.expr)}();\n`
+      return `${codegenExpr(scope, stmt.expr)}();\n`
   }
 }
 
@@ -1368,7 +1368,7 @@ export function compile(source: string) {
   // TODO: compile State declarations
 
   // compile statements
-  for (const statement of statements) js += compileStmt(topLevelScope, statement)
+  for (const statement of statements) js += codegenStmt(topLevelScope, statement)
 
   // TODO: compile When declarations
   return js
