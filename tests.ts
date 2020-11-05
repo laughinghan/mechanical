@@ -5,7 +5,7 @@ import { exec } from 'child_process'
 import { Readable } from 'stream'
 import { Failure } from 'parsimmon'
 
-import { AST, parserAtIndent, parser, TopLevel, ProgramParser, Types, compile } from './mechc'
+import { AST, parserAtIndent, parser, TopLevel, ProgramParser, Types, compile, codegenExpr, codegenStmt } from './mechc'
 
 import { arb_nontrivial_type, arb_type_pairs, arb_similar_types, perturb_type, isWellFormed } from './test_helpers'
 
@@ -62,6 +62,8 @@ const ChangeStmt = (varName: string, expr: AST.Expression) =>
   ({ type: 'ChangeStmt', varName, expr } as const)
 const ReturnStmt = (expr: AST.Expression) =>
   ({ type: 'ReturnStmt', expr } as const)
+const DoStmt = (expr: AST.Expression) =>
+  ({ type: 'DoStmt', expr } as const)
 const AfterGotStmt = (vars: string) =>
   ({ type: 'AfterGotStmt', vars: vars.split(' ') } as const)
 
@@ -1580,6 +1582,46 @@ suite('Type System', () => {
           }
         }
       )))
+    })
+  })
+})
+
+suite('codegen', () => {
+  suite('primary exprs', () => {
+    test('Variables', () => {
+      const ctx = {
+        indent: '',
+        scope: { foo: 'foo_' },
+      } as const
+      const observed = codegenExpr(ctx, Var('foo'))
+      const expected = 'foo_'
+      assert.strictEqual(observed, expected)
+    })
+  })
+  suite('CallExprs', () => {
+    test('basic', () => {
+      const ctx = {
+        indent: '',
+        scope: { foo: 'foo_' },
+      } as const
+      const observed = codegenExpr(ctx, FnCall(Var('foo'), '1'))
+      const expected = 'foo_(1)'
+      assert.deepStrictEqual(observed, expected)
+    })
+  })
+  suite('DoStmt', () => {
+    test('basic', () => {
+      const ctx = {
+        indent: '',
+        scope: { foo: 'foo_' },
+      } as const
+      const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
+      const expected1 = 'foo_();\n'
+      assert.deepStrictEqual(observed1, expected1)
+
+      const observed2 = codegenStmt(ctx, DoStmt(FnCall(Var('foo'), '1')))
+      const expected2 = 'foo_(1)();\n'
+      assert.deepStrictEqual(observed2, expected2)
     })
   })
 })

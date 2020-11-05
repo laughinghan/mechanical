@@ -1323,7 +1323,7 @@ interface Context {
   scope: { [name: string]: string }
 }
 
-function codegenExpr(ctx: Context, expr: AST.Expression): string {
+export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   if (typeof expr === 'string') {
     // TODO: field access functions, escaping line terminators in string literals
     return expr
@@ -1340,7 +1340,7 @@ function codegenExpr(ctx: Context, expr: AST.Expression): string {
   }
 }
 
-function codegenStmt(ctx: Context, stmt: AST.Statement): string {
+export function codegenStmt(ctx: Context, stmt: AST.Statement): string {
   switch (stmt.type) {
     case 'DoStmt':
       return `${codegenExpr(ctx, stmt.expr)}();\n`
