@@ -1587,23 +1587,63 @@ suite('Type System', () => {
 })
 
 suite('codegen', () => {
+  const ctx = {
+    indent: '',
+    scope: { foo: 'foo_' },
+  } as const
   suite('primary exprs', () => {
-    test('Variables', () => {
-      const ctx = {
-        indent: '',
-        scope: { foo: 'foo_' },
-      } as const
+    test('Variable', () => {
       const observed = codegenExpr(ctx, Var('foo'))
       const expected = 'foo_'
       assert.strictEqual(observed, expected)
     })
+    test('ArrayLiteral', () => {
+      const observed1 = codegenExpr(ctx,
+        ArrayLiteral([ '1', Var('foo'), '3' ]))
+      const expected1 = '[1, foo_, 3]'
+      assert.strictEqual(observed1, expected1)
+
+      const observed2 = codegenExpr(ctx, ArrayLiteral([]))
+      const expected2 = '[]'
+      assert.strictEqual(observed2, expected2)
+    })
+    test('RecordLiteral', () => {
+      const observed0 = codegenExpr(ctx, RecordLiteral({}))
+      const expected0 = '{}'
+      assert.strictEqual(observed0, expected0)
+
+      const observed1 = codegenExpr(ctx, RecordLiteral({ a: '1' }))
+      const expected1 = '{ a: 1 }'
+      assert.strictEqual(observed1, expected1)
+
+      const observed2 = codegenExpr(ctx,
+        RecordLiteral({ a: '1', b: Var('foo'), c: '3' }))
+      const expected2 = '{\n'
+        + '  a: 1,\n'
+        + '  b: foo_,\n'
+        + '  c: 3\n'
+        + '}'
+      assert.strictEqual(observed2, expected2)
+
+      const observed3 = codegenExpr({ ...ctx, indent: '    ' },
+        RecordLiteral({
+          a: RecordLiteral({}),
+          b: RecordLiteral({ c: '1', }),
+          d: RecordLiteral({ e: '2', f: '3' }),
+        }))
+      const expected3 = '{\n'
+        + '      a: {},\n'
+        + '      b: { c: 1 },\n'
+        + '      d: {\n'
+        + '        e: 2,\n'
+        + '        f: 3\n'
+        + '      }\n'
+        + '    }'
+      assert.strictEqual(observed3, expected3)
+    })
   })
   suite('CallExprs', () => {
     test('basic', () => {
-      const ctx = {
-        indent: '',
-        scope: { foo: 'foo_' },
-      } as const
       const observed = codegenExpr(ctx, FnCall(Var('foo'), '1'))
       const expected = 'foo_(1)'
       assert.deepStrictEqual(observed, expected)
@@ -1611,10 +1651,6 @@ suite('codegen', () => {
   })
   suite('DoStmt', () => {
     test('basic', () => {
-      const ctx = {
-        indent: '',
-        scope: { foo: 'foo_' },
-      } as const
       const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
       const expected1 = 'foo_();\n'
       assert.deepStrictEqual(observed1, expected1)

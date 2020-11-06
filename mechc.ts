@@ -1331,6 +1331,20 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   switch (expr.type) {
     case 'Variable':
         return ctx.scope[expr.name]
+    case 'ArrayLiteral':
+      return `[${expr.exprs.map(item => codegenExpr(ctx, item)).join(', ')}]`
+    case 'RecordLiteral':
+      if (expr.pairs.length === 0) return '{}'
+      if (expr.pairs.length === 1) {
+        const [{ key, val }] = expr.pairs
+        return `{ ${key}: ${codegenExpr(ctx, val)} }`
+      }
+      const indent = ctx.indent + '  '
+      return `{\n${
+        expr.pairs.map(({key, val}) =>
+          indent + key + ': ' + codegenExpr({ ...ctx, indent }, val)
+        ).join(',\n')
+      }\n${ctx.indent}}`
     case 'CallExpr':
       if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
       return `${codegenExpr(ctx, expr.func)}(${
