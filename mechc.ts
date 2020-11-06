@@ -1325,7 +1325,9 @@ interface Context {
 
 export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   if (typeof expr === 'string') {
-    // TODO: field access functions, escaping line terminators in string literals
+    // this "just works" for booleans, numerals, and single-line string literals
+    // TODO: multi-line string literals
+    if (expr.charAt(0) === '.') return `(record => record${expr})`
     return expr
   }
   switch (expr.type) {

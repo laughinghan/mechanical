@@ -1592,6 +1592,16 @@ suite('codegen', () => {
     scope: { foo: 'foo_' },
   } as const
   suite('primary exprs', () => {
+    test('scalars (numerals, boolean and string literals)', () => {
+      assert.strictEqual(codegenExpr(ctx, '123'   ), '123')
+      assert.strictEqual(codegenExpr(ctx, '"asdf"'), '"asdf"')
+      assert.strictEqual(codegenExpr(ctx, 'true'  ), 'true')
+    })
+    test('FieldFunc', () => {
+      const observed = codegenExpr(ctx, '.field_name')
+      const expected = '(record => record.field_name)'
+      assert.strictEqual(observed, expected)
+    })
     test('Variable', () => {
       const observed = codegenExpr(ctx, Var('foo'))
       const expected = 'foo_'
