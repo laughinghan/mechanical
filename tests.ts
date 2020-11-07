@@ -37,9 +37,9 @@ const FnCall = (func: AST.Expression, arg: AST.Expression) =>
   MethodCall(null, func, arg)
 const FnCallN = (func: AST.Expression, args: {[label: string]: AST.Expression}) =>
   MethodCallN(null, func, args)
-const MethodCall = (contextArg: AST.Expression | null, func: AST.Expression, arg: AST.Expression) =>
+const MethodCall = (contextArg: AST.Expression | null, func: AST.Expression, arg?: AST.Expression) =>
   ({ type: 'CallExpr', contextArg, func,
-    args: [{ label: null, arg }] } as const)
+    args: (arg ? [{ label: null, arg }] : []) } as const)
 const MethodCallN = (contextArg: AST.Expression | null, func: AST.Expression, args: {[label: string]: AST.Expression}) =>
   ({ type: 'CallExpr', contextArg, func,
     args: Object.keys(args).map(label =>
@@ -1652,11 +1652,144 @@ suite('codegen', () => {
       assert.strictEqual(observed3, expected3)
     })
   })
+  suite('FieldAccessExpr', () => {
+    test('basic', () => {
+      const observed = codegenExpr(ctx, FieldAccess(Var('foo'), 'field'))
+      const expected = 'foo_.field'
+      assert.strictEqual(observed, expected)
+    })
+    test('precedence: no parens needed x.y.foo().z', () => {
+      const observed = codegenExpr(
+        { ...ctx, scope: { ...ctx.scope, x: 'x' } },
+        FieldAccess(MethodCall(FieldAccess(Var('x'), 'y'), Var('foo')), 'z'))
+      const expected = 'foo_(x.y).z'
+      assert.strictEqual(observed, expected)
+    })
+    test('precedence: need parens (x + y).z', () => {
+      const observed = codegenExpr(
+        { ...ctx, scope: { x: 'x', y: 'y' } },
+        FieldAccess(Binop(Var('x'), '+', Var('y')), 'z'))
+      const expected = '(x + y).z'
+      assert.strictEqual(observed, expected)
+    })
+  })
   suite('CallExprs', () => {
     test('basic', () => {
       const observed = codegenExpr(ctx, FnCall(Var('foo'), '1'))
       const expected = 'foo_(1)'
       assert.deepStrictEqual(observed, expected)
+    })
+    test('method call', () => {
+      const observed = codegenExpr(ctx, MethodCall('1', Var('foo'), '2'))
+      const expected = 'foo_(1, 2)'
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('precedence: need parens (x + y).foo(1)', () => {
+      const observed = codegenExpr(
+        { ...ctx, scope: { ...ctx.scope, x: 'x', y: 'y' } },
+        MethodCall(Binop(Var('x'), '+', Var('y')), Var('foo'), '1'))
+      const expected = 'foo_(x + y, 1)'
+      assert.deepStrictEqual(observed, expected)
+    })
+  })
+  suite('unops and binops', () => {
+    test('PEMDAS', () => {
+      const observed = codegenExpr(ctx,
+        Binop('2', '-',
+          Binop(
+            Binop('3', '*', Binop(Binop('4', '+', '5'), '**', Unop('-', '6'))),
+            '/',
+            Binop('7', '**', '8'))))
+      const expected = '2 - 3*(4 + 5)**-6/7**8'
+      assert.strictEqual(observed, expected)
+    })
+    test('full associativity', () => {
+      const observed = codegenExpr(ctx,
+        Binop(
+          Binop('1', '+', '2'),
+          '+',
+          Binop(
+            Binop(Binop('3', '*', '4'), '*', Binop('5', '*', '6')),
+            '+',
+            Binop('7', '+', '8'))))
+      const expected = '1 + 2 + 3*4*5*6 + 7 + 8'
+      assert.strictEqual(observed, expected)
+    })
+    test('left-associative ops', () => {
+      const observed = codegenExpr(ctx,
+        Binop(
+          Binop(
+            Binop(
+              Binop('1', '/', '2'),
+              '/',
+              Binop('3', '/', '4')),
+            '-',
+            '5'),
+          '-',
+          Binop(
+            '6',
+            '-',
+            Binop(
+              Binop('7', '%', '8'),
+              '%',
+              Binop('9', '%', '10')))))
+      const expected = '1/2/(3/4) - 5 - (6 - 7 % 8 % (9 % 10))'
+      assert.strictEqual(observed, expected)
+    })
+    test('non-associative ops', () => {
+      const observed = codegenExpr(ctx,
+        Binop(
+          Binop('1', '<', '2'),
+          '==',
+          Binop('3', '<=', '4')))
+      const expected = '(1 < 2) === (3 <= 4)'
+      assert.strictEqual(observed, expected)
+    })
+    test('exclusive precedence', () => {
+      const scope = { a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f',
+        g: 'g', h: 'h', i: 'i', j: 'j' }
+      const observed = codegenExpr({ ...ctx, scope },
+        Binop(
+          Binop(
+            Binop(
+              Binop(Binop(Var('a'), '||', Var('b')), '&&', Var('c')),
+              '&&',
+              Binop(Var('d'), '&&', Binop(Var('e'), '||', Var('f')))),
+            '||',
+            Var('g')),
+          '||',
+          Binop(Var('h'), '||', Binop(Var('i'), '&&', Var('j')))))
+      const expected = '((a || b) && c && d && (e || f)) || g || h || (i && j)'
+      assert.strictEqual(observed, expected)
+    })
+    test('CompareChainExpr', () => {
+      const scope = { a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f',
+        g: 'g', h: 'h', i: 'i', j: 'j' }
+      const observed = codegenExpr({ ...ctx, scope },
+        Binop(
+          CompareChain(
+            Binop('1', '<', '2'),
+            Binop('2', '==', '3'),
+            Binop('3', '<=', '4')),
+          '&&',
+          CompareChain(
+            Binop('9', '>', '8'),
+            Binop('8', '>=', '7'))))
+      const expected = '1 < 2 && 2 === 3 && 3 <= 4 && 9 > 8 && 8 >= 7'
+      assert.strictEqual(observed, expected)
+    })
+    test('spacing', () => {
+      const observed = codegenExpr(ctx,
+        Binop(
+          Binop(
+            Binop(
+              '1', '+', Binop(Binop(Binop('2', '*', '3'), '/', '4'), '%', '5')),
+            '-',
+            '6'),
+          '==',
+          '7'))
+      const expected = '1 + 2*3/4 % 5 - 6 === 7'
+      assert.strictEqual(observed, expected)
     })
   })
   suite('DoStmt', () => {

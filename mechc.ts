@@ -1323,12 +1323,61 @@ interface Context {
   scope: { [name: string]: string }
 }
 
+function codegenPrecedence(expr: AST.Expression): number {
+  if (typeof expr === 'string') return 0
+  switch (expr.type) {
+    case 'Variable':
+    case 'ArrayLiteral':
+    case 'RecordLiteral':
+    case 'FieldAccessExpr':
+    case 'CallExpr':
+      return 0 // primary expressions
+    case 'UnaryExpr':
+      return 1 // unary expressions
+    case 'BinaryExpr':
+      switch (expr.op) {
+        case '**':
+          return 2 // exponentiation
+        case '*':
+        case '/':
+        case '%':
+          return 3 // multiplication
+        case '+':
+        case '-':
+          return 4 // addition
+        case '==':
+        case '!=':
+        case '<':
+        case '>':
+        case '<=':
+        case '>=':
+          return 5 // comparisons
+        case '&&':
+        case '||':
+          return 6 // logical operators
+      }
+    case 'CompareChainExpr':
+      return 6 // comparisons joined by &&'s
+    default:
+      return 7 // everything else
+  }
+}
+
 export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   if (typeof expr === 'string') {
     // this "just works" for booleans, numerals, and single-line string literals
     // TODO: multi-line string literals
     if (expr.charAt(0) === '.') return `(record => record${expr})`
     return expr
+  }
+  function parenthesize(subExpr: AST.Expression, strict?: boolean) {
+    if (!strict && codegenPrecedence(subExpr) === codegenPrecedence(expr)) {
+      return codegenExpr(ctx, subExpr)
+    }
+    else if (codegenPrecedence(subExpr) < codegenPrecedence(expr)) {
+      return codegenExpr(ctx, subExpr)
+    }
+    return '(' + codegenExpr(ctx, subExpr) + ')'
   }
   switch (expr.type) {
     case 'Variable':
@@ -1347,10 +1396,67 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
           indent + key + ': ' + codegenExpr({ ...ctx, indent }, val)
         ).join(',\n')
       }\n${ctx.indent}}`
+    case 'FieldAccessExpr':
+      return parenthesize(expr.record) + '.' + expr.fieldName
     case 'CallExpr':
-      if (expr.contextArg) throw 'method-syntax for calling functions not yet implemented'
-      return `${codegenExpr(ctx, expr.func)}(${
-        expr.args.map(({arg}) => codegenExpr(ctx, arg)).join(', ')})`
+      if (expr.contextArg) {
+        return parenthesize(expr.func) + '('
+          + codegenExpr(ctx, expr.contextArg)
+          + expr.args.map(({arg}) => ', ' + codegenExpr(ctx, arg)).join('')
+          + ')'
+      }
+      return parenthesize(expr.func)
+        + `(${expr.args.map(({arg}) => codegenExpr(ctx, arg)).join(', ')})`
+    case 'UnaryExpr':
+      return expr.op + parenthesize(expr.arg)
+    case 'BinaryExpr': {
+      const { left, op, right } = expr
+      const paddedOp =
+        (op === '**' || op === '*' || op === '/') ? op
+        : (op === '==' || op === '!=') ? ` ${op}= `
+        : ` ${op} `
+      switch (op) {
+        case '*': // fully associative
+        case '+':
+          return parenthesize(left) + paddedOp + parenthesize(right)
+
+        case '/': // left-associative
+        case '%':
+        case '-':
+          return parenthesize(left) + paddedOp + parenthesize(right, true)
+
+        case '**': // non-associative
+        case '==':
+        case '!=':
+        case '<':
+        case '>':
+        case '<=':
+        case '>=':
+          return parenthesize(left, true) + paddedOp + parenthesize(right, true)
+      }
+      // && and || are associative but "exclusive precedence", meaning
+      // neither has higher precedence than the other. We do this even
+      // though in other ALGOL descendents it's pretty much universal that
+      // && has higher precedence than || (because it's mathematically
+      // multiplication, and || is addition), because I think it doesn't
+      // _read_ as having higher precedence; I think combined && and || is
+      // much more readable with parens. And unlike arithmetic, you never
+      // need nested parens thanks to de Morgan's laws.
+      // TODO: open a discussion ticket
+      const leftOpIsOr = (typeof left !== 'string'
+        && left.type === 'BinaryExpr' && left.op === '||')
+      const rightOpIsOr = (typeof right !== 'string'
+        && right.type === 'BinaryExpr' && right.op === '||')
+
+      // between booleans, !== is xor. So strict parenthesize:
+      //   - if this op is && and the subexpr op is ||
+      //   - or if this op is || , and the subexpr op isn't ||
+      const leftExpr = parenthesize(left, leftOpIsOr !== (op === '||'))
+      const rightExpr = parenthesize(right, rightOpIsOr !== (op === '||'))
+      return leftExpr + paddedOp + rightExpr
+    }
+    case 'CompareChainExpr':
+      return expr.chain.map(binop => codegenExpr(ctx, binop)).join(' && ')
     default:
       throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
   }
