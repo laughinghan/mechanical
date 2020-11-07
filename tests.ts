@@ -1684,6 +1684,13 @@ suite('codegen', () => {
       const expected = 'foo_(1, 2)'
       assert.deepStrictEqual(observed, expected)
     })
+    test('precedence: need parens (x ? foo : bar)(1)', () => {
+      const observed = codegenExpr(
+        { ...ctx, scope: { x: 'y', foo: 'foo', bar: 'bar' } },
+        FnCall(CondExpr(Var('x'), Var('foo'), Var('bar')), '1'))
+      const expected = '(y ? foo : bar)(1)'
+      assert.deepStrictEqual(observed, expected)
+    })
     test('precedence: need parens (x + y).foo(1)', () => {
       const observed = codegenExpr(
         { ...ctx, scope: { ...ctx.scope, x: 'x', y: 'y' } },
@@ -1789,6 +1796,40 @@ suite('codegen', () => {
           '==',
           '7'))
       const expected = '1 + 2*3/4 % 5 - 6 === 7'
+      assert.strictEqual(observed, expected)
+    })
+  })
+  suite('CondExpr', () => {
+    test('basic', () => {
+      const observed = codegenExpr(ctx,
+        CondExpr(Binop('1', '<', '2'), '3', '4'))
+      const expected = '1 < 2 ? 3 : 4'
+      assert.strictEqual(observed, expected)
+    })
+    test('right-associativity (sort of)', () => {
+      const scope = { a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f',
+        g: 'g', h: 'h', i: 'i', j: 'j' }
+      const observed1 = codegenExpr({ ...ctx, scope },
+        CondExpr(Var('a'), Var('b'), CondExpr(Var('c'), Var('d'), Var('e'))))
+      const expected1 = 'a ? b : c ? d : e'
+      assert.strictEqual(observed1, expected1)
+
+      const observed2 = codegenExpr({ ...ctx, scope },
+        CondExpr(Var('a'), CondExpr(Var('b'), Var('c'), Var('d')), Var('e')))
+      const expected2 = 'a ? b ? c : d : e'
+      assert.strictEqual(observed2, expected2)
+
+      const observed3 = codegenExpr({ ...ctx, scope },
+        CondExpr(CondExpr(Var('a'), Var('b'), Var('c')), Var('d'), Var('e')))
+      const expected3 = '(a ? b : c) ? d : e'
+      assert.strictEqual(observed3, expected3)
+    })
+    test('more complex precedence', () => {
+      const observed = codegenExpr(ctx, Binop('1', '+', CondExpr(
+        Binop(Binop('2', '+', '3'), '>', '4'),
+        '5',
+        Binop(Binop('6', '*', '7'), '-', '8'))))
+      const expected = '1 + (2 + 3 > 4 ? 5 : 6*7 - 8)'
       assert.strictEqual(observed, expected)
     })
   })

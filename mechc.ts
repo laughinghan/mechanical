@@ -1358,8 +1358,10 @@ function codegenPrecedence(expr: AST.Expression): number {
       }
     case 'CompareChainExpr':
       return 6 // comparisons joined by &&'s
-    default:
-      return 7 // everything else
+    case 'CondExpr':
+      return 7
+    case 'ArrowFunc':
+      return 8
   }
 }
 
@@ -1457,6 +1459,10 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
     }
     case 'CompareChainExpr':
       return expr.chain.map(binop => codegenExpr(ctx, binop)).join(' && ')
+    case 'CondExpr':
+      return parenthesize(expr.test, true)
+        + ' ? ' + parenthesize(expr.ifYes)
+        + ' : ' + parenthesize(expr.ifNo)
     default:
       throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
   }
