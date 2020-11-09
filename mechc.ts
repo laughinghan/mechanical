@@ -1323,6 +1323,15 @@ interface Context {
   scope: { [name: string]: string }
 }
 
+const JS_RESERVED_WORDS: {readonly [kw: string]: true} = {}
+for (const word of `abstract arguments await boolean break byte case catch char
+class const continue debugger default delete do double else enum export extends
+false final finally float for function get goto if import implements in int
+interface instanceof let long native new null package private protected public
+return set short static super switch synchronized this throw throws transient
+true try typeof undefined var void volatile while with yield`.split(/\s+/)
+) (JS_RESERVED_WORDS as any)[word] = true
+
 function codegenPrecedence(expr: AST.Expression): number {
   if (typeof expr === 'string') return 0
   switch (expr.type) {
@@ -1464,8 +1473,33 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
       return parenthesize(expr.test, true)
         + ' ? ' + parenthesize(expr.ifYes)
         + ' : ' + parenthesize(expr.ifNo)
-    default:
-      throw 'Unexpected or not-yet-implemented expression type: ' + expr.type
+    case 'ArrowFunc':
+      const scope = { ...ctx.scope }
+      const params = expr.params.slice() // array copy
+      for (let i = 0; i < params.length; i += 1) {
+        const param = params[i]
+        if (JS_RESERVED_WORDS[param]) {
+          scope[param] = params[i] = param + '_'
+        } else {
+          scope[param] = param
+        }
+      }
+      const paramsStr = params.length > 1 ? `(${params.join(', ')})` : params[0]
+
+      const { body } = expr
+      if (body instanceof Array) {
+        throw 'Codegen not yet implemented for arrow functions containing statements'
+      }
+      const bodyAsExpr = body as AST.Expression // this is only necessary because
+        // TypeScript's type narrowing incorrectly considers `readonly AST.Statement[]`
+        // to be disjoint from `instanceof Array` (when in fact it's obviously
+        // a subtype). As of this writing this is fixed in TypeScript's Nightly
+        // release, I think by this PR:
+        //   https://github.com/microsoft/TypeScript/pull/39258#issuecomment-720729851
+        // So when that ships, we should be able to remove this line.
+      const bodyStr = codegenExpr({ ...ctx, scope }, bodyAsExpr)
+      return paramsStr + ' => '
+        + (bodyStr.startsWith('{') ? `(${bodyStr})` : bodyStr)
   }
 }
 

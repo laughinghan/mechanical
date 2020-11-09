@@ -1837,6 +1837,43 @@ suite('codegen', () => {
       assert.strictEqual(observed, expected)
     })
   })
+  suite('ArrowFunc', () => {
+    test('basic', () => {
+      const observed1 = codegenExpr(ctx, ArrowFunc('x', Binop(Var('x'), '**', '2')))
+      const expected1 = 'x => x**2'
+      assert.strictEqual(observed1, expected1)
+
+      const observed2 = codegenExpr(ctx,
+        ArrowFunc('x y', Binop(Var('x'), '+', Var('y'))))
+      const expected2 = '(x, y) => x + y'
+      assert.strictEqual(observed2, expected2)
+    })
+    test('precedence and parenthesization', () => {
+      const ctx = { indent: '', scope: { x: 'x' } }
+      const observed1 = codegenExpr(ctx,
+        ArrowFunc('x', CondExpr(Var('x'), '1', Unop('-', '1'))))
+      const expected1 = 'x => x ? 1 : -1'
+      assert.strictEqual(observed1, expected1)
+
+      const observed2 = codegenExpr(ctx, CondExpr(Var('x'),
+        ArrowFunc('y', Binop(Var('y'), '+', '1')),
+        ArrowFunc('y', Binop(Var('y'), '+', '2'))))
+      const expected2 = 'x ? (y => y + 1) : (y => y + 2)'
+      assert.strictEqual(observed2, expected2)
+
+      const observed3 = codegenExpr(ctx, CondExpr(Var('x'),
+        ArrowFunc('y', CondExpr(Var('y'), '1', '2')),
+        ArrowFunc('y', CondExpr(Var('y'), Unop('-', '1'), Unop('-', '2')))))
+      const expected3 = 'x ? (y => y ? 1 : 2) : (y => y ? -1 : -2)'
+      assert.strictEqual(observed3, expected3)
+    })
+    test('JS reserved words', () => {
+      const observed = codegenExpr(ctx, ArrowFunc('try new function',
+        Binop(Binop(Var('try'), '+', Var('new')), '+', Var('function'))))
+      const expected = '(try_, new_, function_) => try_ + new_ + function_'
+      assert.strictEqual(observed, expected)
+    })
+  })
   suite('DoStmt', () => {
     test('basic', () => {
       const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
