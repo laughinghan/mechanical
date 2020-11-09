@@ -1606,6 +1606,10 @@ suite('codegen', () => {
       const observed = codegenExpr(ctx, Var('foo'))
       const expected = 'foo_'
       assert.strictEqual(observed, expected)
+
+      assert.throws(() => {
+        codegenExpr(ctx, Var('asdf'))
+      })
     })
     test('ArrayLiteral', () => {
       const observed1 = codegenExpr(ctx,

@@ -1383,7 +1383,8 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   }
   switch (expr.type) {
     case 'Variable':
-        return ctx.scope[expr.name]
+      if (!(expr.name in ctx.scope)) throw new Error(`Unbound variable: ${expr.name}`)
+      return ctx.scope[expr.name]
     case 'ArrayLiteral':
       return `[${expr.exprs.map(item => codegenExpr(ctx, item)).join(', ')}]`
     case 'RecordLiteral':
