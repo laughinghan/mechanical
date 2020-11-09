@@ -62,6 +62,8 @@ const ChangeStmt = (varName: string, expr: AST.Expression) =>
   ({ type: 'ChangeStmt', varName, expr } as const)
 const ReturnStmt = (expr: AST.Expression) =>
   ({ type: 'ReturnStmt', expr } as const)
+const EmitStmt = (expr: AST.Expression) =>
+  ({ type: 'EmitStmt', expr } as const)
 const DoStmt = (expr: AST.Expression) =>
   ({ type: 'DoStmt', expr } as const)
 const AfterGotStmt = (vars: string) =>
@@ -1874,8 +1876,20 @@ suite('codegen', () => {
       assert.strictEqual(observed, expected)
     })
   })
-  suite('DoStmt', () => {
-    test('basic', () => {
+  suite('simple statements', () => {
+    test('ReturnStmt', () => {
+      const observed = codegenStmt(ctx,
+        ReturnStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
+      const expected = 'return 2*foo_ + 1;\n'
+      assert.strictEqual(observed, expected)
+    })
+    test('EmitStmt', () => {
+      const observed = codegenStmt(ctx,
+        EmitStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
+      const expected = '$emit(2*foo_ + 1);\n'
+      assert.strictEqual(observed, expected)
+    })
+    test('DoStmt', () => {
       const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
       const expected1 = 'foo_();\n'
       assert.deepStrictEqual(observed1, expected1)

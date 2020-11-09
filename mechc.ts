@@ -1505,6 +1505,11 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
 
 export function codegenStmt(ctx: Context, stmt: AST.Statement): string {
   switch (stmt.type) {
+    case 'ReturnStmt':
+      return `return ${codegenExpr(ctx, stmt.expr)};\n`
+    case 'EmitStmt':
+      // TODO: somehow check this is in an event emitter
+      return `$emit(${codegenExpr(ctx, stmt.expr)});\n`
     case 'DoStmt':
       return `${codegenExpr(ctx, stmt.expr)}();\n`
     default:
