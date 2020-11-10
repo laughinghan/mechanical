@@ -1880,23 +1880,47 @@ suite('codegen', () => {
     test('ReturnStmt', () => {
       const observed = codegenStmt(ctx,
         ReturnStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
-      const expected = 'return 2*foo_ + 1;\n'
-      assert.strictEqual(observed, expected)
+      const expected = { code: 'return 2*foo_ + 1;\n', newVar: undefined }
+      assert.deepStrictEqual(observed, expected)
     })
     test('EmitStmt', () => {
       const observed = codegenStmt(ctx,
         EmitStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
-      const expected = '$emit(2*foo_ + 1);\n'
-      assert.strictEqual(observed, expected)
+      const expected = { code: '$emit(2*foo_ + 1);\n', newVar: undefined }
+      assert.deepStrictEqual(observed, expected)
     })
     test('DoStmt', () => {
       const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
-      const expected1 = 'foo_();\n'
+      const expected1 = { code: 'foo_();\n', newVar: undefined }
       assert.deepStrictEqual(observed1, expected1)
 
       const observed2 = codegenStmt(ctx, DoStmt(FnCall(Var('foo'), '1')))
-      const expected2 = 'foo_(1)();\n'
+      const expected2 = { code: 'foo_(1)();\n', newVar: undefined }
       assert.deepStrictEqual(observed2, expected2)
+    })
+  })
+  suite('LetStmt', () => {
+    test('basic arrow function', () => {
+      const observed = codegenExpr(ctx, ArrowFunc('x', [
+        LetStmt('y', Binop(Var('x'), '+', '1')),
+        ReturnStmt('y'),
+      ]))
+      const expected = 'x => {\n'
+        + '  const y = x + 1;\n'
+        + '  return y;\n'
+        + '}'
+      assert.strictEqual(observed, expected)
+    })
+    test('JS reserved words', () => {
+      const observed = codegenExpr(ctx, ArrowFunc('for', [
+        LetStmt('return', Binop(Var('for'), '+', '1')),
+        ReturnStmt(Var('return')),
+      ]))
+      const expected = 'for_ => {\n'
+        + '  const return_ = for_ + 1;\n'
+        + '  return return_;\n'
+        + '}'
+      assert.strictEqual(observed, expected)
     })
   })
 })

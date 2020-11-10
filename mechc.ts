@@ -1488,7 +1488,14 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
 
       const { body } = expr
       if (body instanceof Array) {
-        throw 'Codegen not yet implemented for arrow functions containing statements'
+        let i = 0
+        const newTemp = () => '_' + (i += 1)
+        const indent = ctx.indent + '  '
+        return paramsStr + ' => {\n' + body.map(stmt => {
+          const { code, newVar } = codegenStmt({ indent, scope }, stmt)
+          if (newVar) scope[newVar.replace(/_$/, '')] = newVar
+          return code
+        }).join('') + ctx.indent + '}'
       }
       const bodyAsExpr = body as AST.Expression // this is only necessary because
         // TypeScript's type narrowing incorrectly considers `readonly AST.Statement[]`
@@ -1503,18 +1510,29 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
   }
 }
 
-export function codegenStmt(ctx: Context, stmt: AST.Statement): string {
+export function codegenStmt(ctx: Context, stmt: AST.Statement): { code: string, newVar?: string } {
+  let code: string, newVar: string | undefined = undefined
   switch (stmt.type) {
     case 'ReturnStmt':
-      return `return ${codegenExpr(ctx, stmt.expr)};\n`
+      code = 'return ' + codegenExpr(ctx, stmt.expr)
+      break
     case 'EmitStmt':
       // TODO: somehow check this is in an event emitter
-      return `$emit(${codegenExpr(ctx, stmt.expr)});\n`
+      code = `$emit(${codegenExpr(ctx, stmt.expr)})`
+      break
+    case 'LetStmt':
+      newVar = stmt.varName
+      if (JS_RESERVED_WORDS[newVar]) newVar += '_'
+      code = `const ${newVar} = ${codegenExpr(ctx, stmt.expr)}`
+      break
     case 'DoStmt':
-      return `${codegenExpr(ctx, stmt.expr)}();\n`
+      code = codegenExpr(ctx, stmt.expr) + '()'
+      break
     default:
       throw 'Unexpected or not-yet-implemented statement type: ' + stmt.type
   }
+  code = ctx.indent + code + ';\n'
+  return { code, newVar }
 }
 
 export function compile(source: string) {
@@ -1548,7 +1566,9 @@ export function compile(source: string) {
 
   js += '\n// initializing statements:\n'
   for (const statement of statements) {
-    js += codegenStmt(topLevelContext, statement)
+    const { code, newVar } = codegenStmt(topLevelContext, statement)
+    js += code
+    if (newVar) topLevelContext.scope[newVar.replace(/_$/, '')] = newVar
   }
 
   js += '\n// When declarations: (TODO)\n'
