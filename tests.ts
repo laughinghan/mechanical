@@ -5,7 +5,7 @@ import { exec } from 'child_process'
 import { Readable } from 'stream'
 import { Failure } from 'parsimmon'
 
-import { AST, parserAtIndent, parser, TopLevel, ProgramParser, Types, compile, codegenExpr, codegenStmt } from './mechc'
+import { TokenTree, AST, parserAtIndent, parser, TopLevel, ProgramParser, Types, compile, codegenExpr, codegenStmt } from './mechc'
 
 import { arb_nontrivial_type, arb_type_pairs, arb_similar_types, perturb_type, isWellFormed } from './test_helpers'
 
@@ -22,6 +22,336 @@ function pre(condition: boolean): asserts condition {
 
   fc.pre(condition)
 }
+
+suite('TokenTree parsing', () => {
+  suite('tokenize()', () => {
+    test('basic', () => {
+      const observed = TokenTree.tokenize(
+          '// count how many times button was clicked\n'
+        + 'State counter = 2\n'
+        + '\n'
+        + 'When btnClick:   \n'
+        + '    \n'
+        + '    // when button is clicked, square counter\n'
+        + '    Change counter to   counter**2\n'
+        + '\n'
+      )
+      const expected = [
+        '// count how many times button was clicked\n',
+        'State', ' ', 'counter', ' ', '=', ' ', '2', '\n\n',
+        'When', ' ', 'btnClick', ':',
+        '   \n    \n    // when button is clicked, square counter\n',
+        '    ', 'Change', ' ', 'counter', ' ', 'to', '   ', 'counter', '**',
+        '2', '\n\n',
+      ]
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('numerals vs identifiers containing digits', () => {
+      const observed = TokenTree.tokenize('x1+1-2x')
+      const expected = ['x1', '+', '1', '-', '2', 'x']
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('lossless (never drops characters)', () => {
+      fc.assert(fc.property(fc.asciiString(), str => {
+        assert.strictEqual(str, TokenTree.tokenize(str).join(''))
+      }))
+      fc.assert(fc.property(fc.string16bits(), str => {
+        assert.strictEqual(str, TokenTree.tokenize(str).join(''))
+      }))
+    })
+  })
+  suite('parse()', () => {
+    function parseAndCheck(source: string) {
+      const parseResult = TokenTree.parse(source)
+      const unmatchedDelims = walk(parseResult.tokens)
+
+      const N = Math.max(unmatchedDelims.length, parseResult.mismatches.length)
+      for (let i = 0; i < N; i += 1) {
+        const obsUnmatched = parseResult.mismatches[i]
+        const {open, close} = obsUnmatched
+        if (open) {
+          assert.strictEqual(open.length, 1)
+          assert.strictEqual(source.slice(open.i, open.i + 1), open.val)
+        }
+        if (close) {
+          if (close.val === 'dedent') {
+            assert(/^ +$/.test(source.slice(close.i, close.i + close.length)))
+            continue
+          } else {
+            assert.strictEqual(close.length, 1)
+            assert.strictEqual(source.slice(close.i, close.i + 1), close.val)
+          }
+        }
+
+        const foundUnmatched = unmatchedDelims[i]
+        if (/[([{]/.test(foundUnmatched.val)) {
+          assert.deepStrictEqual(obsUnmatched.open,  foundUnmatched)
+        } else {
+          assert.deepStrictEqual(obsUnmatched.close, foundUnmatched)
+        }
+      }
+      return parseResult
+
+      function walk(tokens: TokenTree.Seq) {
+        const unmatchedDelims: any[] = []
+        for (const t of tokens) {
+          if (t.type === 'Group') {
+            if (t.delims === 'indent') {
+              assert(t.nested.length > 0)
+              const indent = source.slice(t.i, t.nested[0].i)
+              assert(/^ +$/.test(indent))
+              const lastToken = t.nested[t.nested.length - 1]
+              assert.strictEqual(lastToken.i + lastToken.length, t.i + t.length)
+
+              unmatchedDelims.push(...walk(t.nested))
+            } else {
+              assert.strictEqual(t.delims.charAt(0), source.slice(t.i, t.i + 1))
+              assert.strictEqual(t.delims.charAt(1), source.slice(t.i + t.length - 1, t.i + t.length))
+              if (t.nested.length) {
+                const leadingSpace = source.slice(t.i + 1, t.nested[0].i)
+                assert(/^[ \n]*$/.test(leadingSpace))
+                const lastToken = t.nested[t.nested.length - 1]
+                const trailingSpace = source.slice(lastToken.i + lastToken.length, t.i + t.length - 1)
+                assert(/^[ \n]*$/.test(trailingSpace))
+
+                unmatchedDelims.push(...walk(t.nested))
+              } else {
+                const emptySpace = source.slice(t.i + 1, t.i + t.length - 1)
+                assert(/^[ \n]*$/.test(emptySpace))
+              }
+            }
+          } else {
+            if (t.val === '\n') {
+              assert(/ *(\/\/[^\n]*)?\n/.test(source.slice(t.i, t.i + t.length)))
+            }
+            else if (t.type === 'UnmatchedDelim' && t.val === 'dedent') {
+              assert(/^ +$/.test(source.slice(t.i, t.i + t.length)))
+            }
+            else {
+              assert.strictEqual(source.slice(t.i, t.i + t.length), t.val)
+            }
+
+            if (t.type === 'UnmatchedDelim') unmatchedDelims.push(t)
+          }
+        }
+        return unmatchedDelims
+      }
+    }
+    function cleanup(obj: any) {
+      delete obj.n
+      delete obj.srcN
+      obj.tokens.forEach(cleanupSpanInfo)
+      obj.mismatches.forEach((m: any) => {
+        if (m.open)  cleanupSpanInfo(m.open)
+        else delete m.open
+        if (m.close) cleanupSpanInfo(m.close)
+        else delete m.close
+      })
+    }
+    function cleanupSpanInfo(token: any) {
+      delete token.i
+      delete token.length
+      if (token.type === 'Group') {
+        token.nested.forEach(cleanupSpanInfo)
+      }
+    }
+
+    test('basic', () => {
+      const observed = parseAndCheck(
+          '// count how many times button was clicked\n'
+        + 'State counter = 2\n'     // normal line-break
+        + '\n'
+        + 'When btnClick:   \n'     // indent
+        + '    \n'
+        + '    // when button is clicked, square counter\n'
+        + '  Let y = x.foo()\n'     // normal line-break
+        + '  Let f = x =>\n'        // indent
+        + '    5*x**2 + 10*x + 5\n' // dedent
+        + '  Let z = 2*(x\n'        // open-paren ( and indent
+        + '             + 1)\n'     // close-paren ), then indent (relative to Let)
+        + '          + 4\n'         // dedent
+        + '  Let obj = {\n'         // open-brace { and indent
+        + '       foo: "foo",\n'    // a normal line-break
+        + '       bar: "bar",\n'    // unmatched dedent
+        + '      asdf: "asdf",\n'   // indent
+        + '         a: "a",\n'      // proper dedent then unmatched dedent
+        + '     xyzzy: "xyzzy",\n'  // dedent
+        + '  }\n'                   // close-brace } and dedent (implicit)
+      )
+      const expected = {
+        tokens: [
+          { type: 'Punct', val: '\n' },
+          { type: 'Ident', val: 'State' },
+          { type: 'Ident', val: 'counter' },
+          { type: 'Punct', val: '=' },
+          { type: 'Numeral', val: '2' },
+          { type: 'Punct', val: '\n' },
+          { type: 'Ident', val: 'When' },
+          { type: 'Ident', val: 'btnClick' },
+          { type: 'Punct', val: ':' },
+          { type: 'Group', delims: 'indent', nested: [
+            { type: 'Ident', val: 'Let' },
+            { type: 'Ident', val: 'y' },
+            { type: 'Punct', val: '=' },
+            { type: 'Ident', val: 'x' },
+            { type: 'FieldFunc', val: '.foo' },
+            { type: 'Group', delims: '()', nested: [] },
+            { type: 'Punct', val: '\n' },
+            { type: 'Ident', val: 'Let' },
+            { type: 'Ident', val: 'f' },
+            { type: 'Punct', val: '=' },
+            { type: 'Ident', val: 'x' },
+            { type: 'Punct', val: '=>' },
+            { type: 'Group', delims: 'indent', nested: [
+              { type: 'Numeral', val: '5' },
+              { type: 'Punct', val: '*' },
+              { type: 'Ident', val: 'x' },
+              { type: 'Punct', val: '**' },
+              { type: 'Numeral', val: '2' },
+              { type: 'Punct', val: '+' },
+              { type: 'Numeral', val: '10' },
+              { type: 'Punct', val: '*' },
+              { type: 'Ident', val: 'x' },
+              { type: 'Punct', val: '+' },
+              { type: 'Numeral', val: '5' },
+            ]},
+            { type: 'Ident', val: 'Let' },
+            { type: 'Ident', val: 'z' },
+            { type: 'Punct', val: '=' },
+            { type: 'Numeral', val: '2' },
+            { type: 'Punct', val: '*' },
+            { type: 'Group', delims: '()', nested: [
+              { type: 'Ident', val: 'x' },
+              { type: 'Group', delims: 'indent', nested: [
+                { type: 'Punct', val: '+' },
+                { type: 'Numeral', val: '1' },
+              ]},
+            ]},
+            { type: 'Group', delims: 'indent', nested: [
+              { type: 'Punct', val: '+' },
+              { type: 'Numeral', val: '4' },
+            ]},
+            { type: 'Ident', val: 'Let' },
+            { type: 'Ident', val: 'obj' },
+            { type: 'Punct', val: '=' },
+            { type: 'Group', delims: '{}', nested: [
+              { type: 'Group', delims: 'indent', nested: [
+                { type: 'Ident', val: 'foo' },
+                { type: 'Punct', val: ':' },
+                { type: 'String', val: '"foo"'},
+                { type: 'Punct', val: ',' },
+                { type: 'Punct', val: '\n' },
+                { type: 'Ident', val: 'bar' },
+                { type: 'Punct', val: ':' },
+                { type: 'String', val: '"bar"'},
+                { type: 'Punct', val: ',' },
+                { type: 'UnmatchedDelim', val: 'dedent' },
+                { type: 'Ident', val: 'asdf' },
+                { type: 'Punct', val: ':' },
+                { type: 'String', val: '"asdf"'},
+                { type: 'Punct', val: ',' },
+                { type: 'Group', delims: 'indent', nested: [
+                  { type: 'Ident', val: 'a' },
+                  { type: 'Punct', val: ':' },
+                  { type: 'String', val: '"a"'},
+                  { type: 'Punct', val: ',' },
+                ]},
+                { type: 'UnmatchedDelim', val: 'dedent' },
+                { type: 'Ident', val: 'xyzzy' },
+                { type: 'Punct', val: ':' },
+                { type: 'String', val: '"xyzzy"'},
+                { type: 'Punct', val: ',' },
+              ]},
+            ]},
+          ]},
+        ],
+        mismatches: [
+          { close: { type: 'UnmatchedDelim', val: 'dedent' } },
+          { close: { type: 'UnmatchedDelim', val: 'dedent' } },
+        ],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('spacing in and around delimiter-groups', () => {
+      const observed = parseAndCheck('(1 + ( -2 * 3) + [5  ])')
+      const expected = {
+        tokens: [
+          { type: 'Group', delims: '()', nested: [
+            { type: 'Numeral', val: '1' },
+            { type: 'Punct', val: '+' },
+            { type: 'Group', delims: '()', nested: [
+              { type: 'Punct', val: '-' },
+              { type: 'Numeral', val: '2' },
+              { type: 'Punct', val: '*' },
+              { type: 'Numeral', val: '3' },
+            ]},
+            { type: 'Punct', val: '+' },
+            { type: 'Group', delims: '[]', nested: [
+              { type: 'Numeral', val: '5' },
+            ]},
+          ]},
+        ],
+        mismatches: [],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('unmatched delimiters in indent group', () => {
+      const observed = parseAndCheck(
+          'Let y =\n'
+        + '  )\n'
+        + '  (\n'
+        + 'Do foo\n'
+      )
+      const expected = {
+        tokens: [
+          { type: 'Ident', val: 'Let' },
+          { type: 'Ident', val: 'y' },
+          { type: 'Punct', val: '=' },
+          { type: 'Group', delims: 'indent', nested: [
+            { type: 'UnmatchedDelim', val: ')' },
+            { type: 'Punct', val: '\n' },
+            { type: 'UnmatchedDelim', val: '(' },
+          ]},
+          { type: 'Ident', val: 'Do' },
+          { type: 'Ident', val: 'foo' },
+        ],
+        mismatches: [
+          { close: { type: 'UnmatchedDelim', val: ')' } },
+          { open:  { type: 'UnmatchedDelim', val: '(' } },
+        ],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
+    test('unmatched close-delimiter in delimited group', () => {
+      const observed = parseAndCheck('Let y = (x + ] + 1)\n')
+      const expected = {
+        tokens: [
+          { type: 'Ident', val: 'Let' },
+          { type: 'Ident', val: 'y' },
+          { type: 'Punct', val: '=' },
+          { type: 'Group', delims: '()', nested: [
+            { type: 'Ident', val: 'x' },
+            { type: 'Punct', val: '+' },
+            { type: 'UnmatchedDelim', val: ']' },
+            { type: 'Punct', val: '+' },
+            { type: 'Numeral', val: '1' },
+          ]},
+        ],
+        mismatches: [
+          {
+            open: { type: 'Punct', val: '(' },
+            close: { type: 'UnmatchedDelim', val: ']' },
+          },
+        ],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
+  })
+})
 
 const Var = (name: string) => ({ type: 'Variable', name } as const)
 const ArrayLiteral = (exprs: AST.Expression[]) =>
@@ -74,7 +404,7 @@ const StateDecl = (varName: string, expr: AST.Expression) =>
 const WhenDecl = (event: AST.Expression, varName: string | null, body: AST.Statement[]) =>
   ({ type: 'WhenDecl', event, varName, body } as const)
 
-suite('Parser', () => {
+suite('AST parsing', () => {
   suite('primary exprs', () => {
     suite('identifiers', () => {
       test('basic this_is_valid', () => {

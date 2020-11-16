@@ -18,6 +18,246 @@ import {
 // Parser
 //
 
+// Stages:
+//   1. Tokenize with a regex
+//   2. Parse into token tree with recursive descent
+//   3. Parse into AST with precedence-climbing
+
+// The conventional approach to parsing programming languages is 2 steps:
+//   1. The tokenizer (aka lexer or scanner) takes source text as input,
+//      and outputs a sequence of tokens.
+//   2. The parser takes the sequence of tokens as input, and outputs
+//      the AST (abstract syntax tree).
+// Typically, they're implemented by writing them in DSLs (domain-specific
+// languages) based on Backus-Naur Form, then using a tool like Jison,
+// PEG.js, Chevrotain, or Ohm to compile them into executable code. Such
+// tools are called "parser generators", or sometimes "compiler compilers".
+// Usually one tool generates both steps, and both steps are written in
+// similar DSLs, often in the same file, so the distinction just helps
+// organize the lexing/parsing code written in the DSL.
+//
+// In contrast, Mechanical's parser is handwritten directly in executable
+// JavaScript (technically, TypeScript). This probably sounds horrifying
+// to anyone familiar with a conventional CS education, but actually by
+// splitting parsing into 3 steps rather than the usual 2, the implementation
+// is reasonably clean:
+//
+// Stage 1, the tokenizer, is just a regex to turn the source text string
+// into a sequence of string tokens.
+//
+// Stage 2, the token tree parser, only parses the nesting of parentheses/
+// brackets/braces and indentation, outputting a sequence of tokens and
+// groups which contain a nested sequence of further tokens and groups.
+// This is a simple top-down recursive-descent parser.
+//
+// Stage 3, the AST parser, doesn't need to deal with nesting because that's
+// taken care of. It mainly deals with infix operators and their relative
+// precedence, using straightforward bottom-up precedence-climbing.
+//
+// Note that by separating parsing nesting from parsing operator precedence,
+// we can use a top-down procedure for one and bottom-up for the other.
+//
+// This approach has a few benefits over the conventional approach:
+//   - Good error messages are easier, because we can ensure we complain
+//     at the right time and provide the right information. The generality
+//     of parser generators often loses crucial information necessary to
+//     provide really excellent error messages.
+//   - It allows users to write macros to manipulate the token tree in a
+//     forward-compatible way, because the token tree format is more
+//     stable than the AST. This is why token trees were invented in the
+//     first place (by the Dylan language).
+//   - Mechanical's intentionally simple syntax lends itself to being
+//     parsed by simple, performant parsing code. Parser generators
+//     are generally designed to be able to parse arbitrarily-complex
+//     context-free grammars, much of which simple recursive-descent
+//     and simple precedence-climbing cannot parse.
+//
+// Misc. design note:
+//   - Conventionally, the tokenizer is responsible for discarding
+//     whitespace and comments, and attaching source location info to
+//     tokens. In CPython, it also inserts NEWLINE, INDENT, and DEDENT
+//     tokens. In Mechanical, the tokenizer is just a regex and doesn't
+//     discard any text. The token tree parser handles nested indentation
+//     grouping, generating newline tokens as well as unmatched brackets
+//     or dedents, and otherwise discarding whitespace and comments,
+//     as well as attaching source location info.
+
+// Acknowledgements:
+// - this way of structuring compilers was best described by @jneen, who
+//   calls our token tree a "skeleton tree":
+//     https://tech.trello.com/jeanine-adkisson-skeleton-trees/
+// - they were inspired by the "D-expressions" paper, which introduced the
+//   skeleton syntax tree as a way for the Dylan language (which has
+//   conventional infix syntax) to provide macro facilities as convenient
+//   as Lisp (whose macro facilities are so convenient because of its
+//   S-expression syntax):
+//     https://people.eecs.berkeley.edu/~jrb/Projects/dexprs.pdf
+// - since Mechanical's skeleton tree serves a similar role to a conventional
+//   tokenizer, I decided to call it a "token tree", like Rust:
+//     https://blog.rust-lang.org/2018/12/21/Procedural-Macros-in-Rust-2018.html#whats-inside-a-tokenstream
+
+export namespace TokenTree {
+  export type Seq = ReadonlyArray<Token | Group>
+
+  interface Token extends Span {
+    readonly type: 'Ident' | 'Punct' | 'UnmatchedDelim'
+                 | 'Numeral' | 'String' | 'FieldFunc' // | 'Hashtag'
+    readonly val: string
+  }
+  interface Group extends Span {
+    readonly type: 'Group'
+    readonly delims: 'indent' | '()' | '[]' | '{}'
+    readonly nested: Seq
+  }
+  interface Span {
+    readonly i: number
+    readonly length: number
+  }
+
+  export function tokenize(source: string): string[] {
+    // TODO: decimals, E notation, numeric separators
+    return source.match(/( *(\/\/[^\n]*)?\n)+| +|\d+[\d_]*|"(\\"|[^"])*"|'(\\'|[^'])*'|\.\w+|\w+|\*\*|==|!=|<=|>=|=>|&&|\|\||[\d\D]/g) || []
+    // the [\d\D] is to match any character, since `.` doesn't match newline-like characters
+  }
+
+  type Mismatch = { open?: Token, close?: Token }
+  type ParseResult = { tokens: Seq, n: number, srcN: number, mismatches: Mismatch[] }
+  function parseSeq(tokens: string[], i: number, srcI: number, indent: number, prevIndent: number, closeDelim: null | ')' | ']' | '}', openI: number, openSrcI: number): ParseResult {
+    const seq: Seq[number][] = []
+    const mismatches: Mismatch[] = []
+    let j = i, srcJ = srcI
+    while (j < tokens.length) {
+      const token = tokens[j]
+      // if this is the close-delim we're waiting for, return without consuming
+      if (token === closeDelim) break
+      // otherwise, any close-delimiter is an unmatched one
+      else if (token === ')' || token === ']' || token === '}') {
+        const unmatchedDelim =
+          { type: 'UnmatchedDelim', val: token, i: srcJ, length: 1 } as const
+        mismatches.push({
+          open: isNaN(openI) ? undefined
+            : { type: 'Punct', val: tokens[openI], i: openSrcI, length: 1 },
+          close: unmatchedDelim })
+        seq.push(unmatchedDelim)
+        j += 1
+        srcJ += 1
+        continue
+      }
+      // if open-delimiter, then recurse
+      if (token === '(' || token === '[' || token === '{') {
+        const closeDelim = token === '(' ? ')' : token === '[' ? ']' : '}'
+        const { tokens: nested, n, srcN, mismatches: newMismatches } =
+          parseSeq(tokens, j + 1, srcJ + 1, indent, prevIndent, closeDelim, j, srcJ)
+        j += n + 1
+        srcJ += srcN + 1
+        const lookahead = tokens[j]
+        // if recursion ended because it encountered the close-delimiter,
+        // then consume it and emit group
+        if (lookahead === closeDelim) {
+          seq.push({ type: 'Group', delims: token + closeDelim as any, nested,
+            i: srcJ - srcN - 1, length: srcN + 2 })
+          j += 1
+          srcJ += 1
+        }
+        else { // else, recursion ended on dedent or EOF, so emit
+          // unmatched open-delim token and then nested tokens
+          const unmatchedDelim =
+            { type: 'UnmatchedDelim', val: token, i: srcJ - srcN - 1, length: 1 } as const
+          seq.push(unmatchedDelim, ...nested)
+          mismatches.push({ open: unmatchedDelim })
+        }
+        mismatches.push(...newMismatches)
+        continue
+      }
+      const lastCh = token.charAt(token.length - 1)
+      // if newline, lookahead at indent of next line
+      if (lastCh === '\n') {
+        if (j + 1 >= tokens.length) break
+        let lookahead = tokens[j + 1]
+        let lookaheadIndent =
+          lookahead && lookahead.endsWith(' ') ? lookahead.length : 0
+        // if unchanged indent level from current, emit newline token
+        if (lookaheadIndent === indent) {
+          seq.push({ type: 'Punct', val: '\n', i: srcJ, length: token.length })
+          j += 1 + (lookaheadIndent ? 1 : 0)
+          srcJ += token.length + lookaheadIndent
+          continue
+        }
+        // if deeper indent, recurse with new indent
+        if (lookaheadIndent > indent) {
+          j += 2
+          srcJ += token.length + lookaheadIndent
+          const { tokens: nested, n, srcN, mismatches: newMismatches } =
+            parseSeq(tokens, j, srcJ, lookaheadIndent, indent, closeDelim, openI, openSrcI)
+
+          seq.push({ type: 'Group', delims: 'indent', nested,
+            i: srcJ - lookaheadIndent, length: srcN + lookaheadIndent })
+          mismatches.push(...newMismatches)
+          j += n
+          srcJ += srcN
+          // if recursion ended in EOF, return
+          if (j + 1 >= tokens.length) break
+          // otherwise, recursion ended on a dedent, lookahead to it
+          lookahead = tokens[j + 1]
+          lookaheadIndent =
+            lookahead && lookahead.endsWith(' ') ? lookahead.length : 0
+          // if closing dedent is exactly the current indent,
+          // continue parsing at this indent level
+          if (lookaheadIndent === indent) {
+            const linebreakLength = tokens[j].length
+            j += 1 + (lookaheadIndent ? 1 : 0)
+            srcJ += linebreakLength + lookaheadIndent
+            continue
+          }
+        }
+        // if dedent to (or past) previous indent, return from current
+        // recursion without consuming newline or indent
+        if (lookaheadIndent <= prevIndent) break
+        // otherwise, must be dedent but only part-of-the-way to previous
+        // indent. Emit unmatched dedent token and update current indent
+        const unmatchedDedent = { type: 'UnmatchedDelim', val: 'dedent',
+          i: srcJ + token.length, length: lookaheadIndent } as const
+        seq.push(unmatchedDedent)
+        mismatches.push({ close: unmatchedDedent })
+        j += 2
+        srcJ += token.length + lookaheadIndent
+        indent = lookaheadIndent
+        continue
+      }
+      // if ordinary whitespace, skip
+      if (lastCh === ' ') {
+        j += 1
+        srcJ += token.length
+        continue
+      }
+      // otherwise, emit token
+      let type: Token['type'] = 'Punct'
+      const ch = token.charAt(0), chCode = token.charCodeAt(0)
+      if (ch === '_'
+        || (0x41 <= chCode && chCode <= 0x5A) // letters A-Z
+        || (0x61 <= chCode && chCode <= 0x7A) // letters a-z
+      ) {
+        type = 'Ident'
+      }
+      else if (0x30 <= chCode && chCode <= 0x39) { // digits 0-9
+        type = 'Numeral'
+      }
+      else if (token.length > 1) {
+        if (ch === '"' || ch === "'") type = 'String'
+        else if (ch === '.') type = 'FieldFunc'
+      }
+      seq.push({ type, val: token, i: srcJ, length: token.length })
+      j += 1
+      srcJ += token.length
+    }
+    return { tokens: seq, n: j - i, srcN: srcJ - srcI, mismatches }
+  }
+
+  export function parse(source: string): { tokens: Seq, mismatches: Mismatch[] } {
+    return parseSeq(tokenize(source), 0, 0, 0, NaN, null, NaN, NaN)
+  }
+}
+
 export namespace AST {
   export type Expression = PrimaryExpr | FieldAccessExpr | CallExpr | UnaryExpr
     | BinaryExpr | CompareChainExpr | CondExpr | ArrowFunc
