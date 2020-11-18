@@ -101,7 +101,7 @@ export namespace TokenTree {
 
   interface Token extends Span {
     readonly type: 'Ident' | 'Punct' | 'UnmatchedDelim'
-                 | 'Numeral' | 'String' | 'FieldFunc' // | 'Hashtag'
+                 | 'Numeral' | 'StringLiteral' | 'FieldFunc' // | 'Hashtag'
     readonly val: string
   }
   interface Group extends Span {
@@ -243,7 +243,7 @@ export namespace TokenTree {
         type = 'Numeral'
       }
       else if (token.length > 1) {
-        if (ch === '"' || ch === "'") type = 'String'
+        if (ch === '"' || ch === "'") type = 'StringLiteral'
         else if (ch === '.') type = 'FieldFunc'
       }
       seq.push({ type, val: token, i: srcJ, length: token.length })
