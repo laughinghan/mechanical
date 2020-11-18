@@ -262,7 +262,20 @@ export namespace AST {
   export type Expression = PrimaryExpr | FieldAccessExpr | CallExpr | UnaryExpr
     | BinaryExpr | CompareChainExpr | CondExpr | ArrowFunc
 
-  export type PrimaryExpr = string | Variable | ArrayLiteral | RecordLiteral
+  export type PrimaryExpr = Numeral | StringLiteral | FieldFunc | Variable
+    | ArrayLiteral | RecordLiteral
+  export interface Numeral {
+    readonly type: 'Numeral'
+    readonly val: string
+  }
+  export interface StringLiteral {
+    readonly type: 'StringLiteral'
+    readonly val: string
+  }
+  export interface FieldFunc {
+    readonly type: 'FieldFunc'
+    readonly val: string
+  }
   export interface Variable {
     readonly type: 'Variable'
     readonly name: string
@@ -439,7 +452,9 @@ export function parserAtIndent(indent: string): {
   const ParenGroup = s('(').then(Expression.trim(_)).skip(s(')'))
   const Variable = Identifier.map(name => ({ type: 'Variable', name } as const))
   const Numeral = r(/\d(?:\d|_\d)*/).desc('numeral (e.g. 123, 9_000)') // TODO decimals, exponential notation
-  const FieldFunc = s('.').then(Identifier).map(name => '.' + name)
+    .map(val => ({ type: 'Numeral', val } as const))
+  const FieldFunc = s('.').then(Identifier)
+    .map(name => ({ type: 'FieldFunc', val: '.' + name } as const))
     .desc('field access function (e.g. .field_name)')
   const StringLiteral = r(/"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/)
     .desc(`string literal (e.g. "..." or '...')`)
@@ -459,7 +474,7 @@ export function parserAtIndent(indent: string): {
         }
       })
       if (errOffset) return Parser(() => makeFailure(errOffset, errMsg))
-      return succeed(dedented)
+      return succeed({ type: 'StringLiteral', val: dedented } as const)
     })
   const ArrayLiteral = s('[').then(
     Expression.thru(sepByOptTrailing(s(',').trim(_))).trim(_)
@@ -1575,6 +1590,9 @@ true try typeof undefined var void volatile while with yield`.split(/\s+/)
 function codegenPrecedence(expr: AST.Expression): number {
   if (typeof expr === 'string') return 0
   switch (expr.type) {
+    case 'Numeral':
+    case 'StringLiteral':
+    case 'FieldFunc':
     case 'Variable':
     case 'ArrayLiteral':
     case 'RecordLiteral':
@@ -1615,12 +1633,6 @@ function codegenPrecedence(expr: AST.Expression): number {
 }
 
 export function codegenExpr(ctx: Context, expr: AST.Expression): string {
-  if (typeof expr === 'string') {
-    // this "just works" for booleans, numerals, and single-line string literals
-    // TODO: multi-line string literals
-    if (expr.charAt(0) === '.') return `(record => record${expr})`
-    return expr
-  }
   function parenthesize(subExpr: AST.Expression, strict?: boolean) {
     if (!strict && codegenPrecedence(subExpr) === codegenPrecedence(expr)) {
       return codegenExpr(ctx, subExpr)
@@ -1631,6 +1643,13 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
     return '(' + codegenExpr(ctx, subExpr) + ')'
   }
   switch (expr.type) {
+    case 'Numeral':
+    case 'StringLiteral':
+      // this "just works" for booleans, numerals, and single-line string literals
+      // TODO: multi-line string literals
+      return expr.val
+    case 'FieldFunc':
+      return `(record => record${expr.val})`
     case 'Variable':
       if (!(expr.name in ctx.scope)) throw new Error(`Unbound variable: ${expr.name}`)
       return ctx.scope[expr.name]
@@ -1695,15 +1714,13 @@ export function codegenExpr(ctx: Context, expr: AST.Expression): string {
       // much more readable with parens. And unlike arithmetic, you never
       // need nested parens thanks to de Morgan's laws.
       // TODO: open a discussion ticket
-      const leftOpIsOr = (typeof left !== 'string'
-        && left.type === 'BinaryExpr' && left.op === '||')
-      const rightOpIsOr = (typeof right !== 'string'
-        && right.type === 'BinaryExpr' && right.op === '||')
+      const leftOpIsOr  = left.type  === 'BinaryExpr' && left.op  === '||'
+      const rightOpIsOr = right.type === 'BinaryExpr' && right.op === '||'
 
       // between booleans, !== is xor. So strict parenthesize:
       //   - if this op is && and the subexpr op is ||
       //   - or if this op is || , and the subexpr op isn't ||
-      const leftExpr = parenthesize(left, leftOpIsOr !== (op === '||'))
+      const leftExpr  = parenthesize(left,  leftOpIsOr  !== (op === '||'))
       const rightExpr = parenthesize(right, rightOpIsOr !== (op === '||'))
       return leftExpr + paddedOp + rightExpr
     }

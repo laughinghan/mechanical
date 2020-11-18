@@ -353,63 +353,72 @@ suite('TokenTree parsing', () => {
   })
 })
 
-const Var = (name: string) => ({ type: 'Variable', name } as const)
-const ArrayLiteral = (exprs: AST.Expression[]) =>
-  ({ type: 'ArrayLiteral', exprs } as const)
-const RecordLiteral = (obj: {[key: string]: AST.Expression}) =>
-  ({ type: 'RecordLiteral',
-    pairs: Object.keys(obj).map(key => ({ key, val: obj[key] })) } as const)
+type Term = string | AST.Expression
+const Term = <E>(val: E): Exclude<E, string> | AST.Expression =>
+  typeof val !== 'string' ? val as Exclude<E, string> // too bad TypeScript doesn't type-narrow to this automatically
+    : /^\d/.test(val)     ? { type: 'Numeral',       val } as const
+    : /^['"]/.test(val)   ? { type: 'StringLiteral', val } as const
+    : val.startsWith('.') ? { type: 'FieldFunc',     val } as const
+    : { type: 'Variable', name: val } as const
 
-const FieldAccess = (record: AST.Expression, fieldName: string) =>
-  ({ type: 'FieldAccessExpr', record, fieldName } as const)
+const ArrayLiteral = (exprs: Term[]) =>
+  ({ type: 'ArrayLiteral', exprs: exprs.map(Term) } as const)
+const RecordLiteral = (obj: {[key: string]: Term}) => ({
+  type: 'RecordLiteral',
+  pairs: Object.keys(obj).map(key => ({ key, val: Term(obj[key]) })),
+} as const)
 
-const FnCall = (func: AST.Expression, arg: AST.Expression) =>
+const FieldAccess = (record: Term, fieldName: string) =>
+  ({ type: 'FieldAccessExpr', record: Term(record), fieldName } as const)
+
+const FnCall = (func: Term, arg: Term) =>
   MethodCall(null, func, arg)
-const FnCallN = (func: AST.Expression, args: {[label: string]: AST.Expression}) =>
+const FnCallN = (func: Term, args: {[label: string]: Term}) =>
   MethodCallN(null, func, args)
-const MethodCall = (contextArg: AST.Expression | null, func: AST.Expression, arg?: AST.Expression) =>
-  ({ type: 'CallExpr', contextArg, func,
-    args: (arg ? [{ label: null, arg }] : []) } as const)
-const MethodCallN = (contextArg: AST.Expression | null, func: AST.Expression, args: {[label: string]: AST.Expression}) =>
-  ({ type: 'CallExpr', contextArg, func,
+const MethodCall = (ctx: Term | null, func: Term, arg?: Term) =>
+  ({ type: 'CallExpr', contextArg: Term(ctx), func: Term(func),
+    args: (arg ? [{ label: null, arg: Term(arg) }] : []) } as const)
+const MethodCallN = (ctx: Term | null, func: Term, args: {[label: string]: Term}) =>
+  ({ type: 'CallExpr', contextArg: Term(ctx), func: Term(func),
     args: Object.keys(args).map(label =>
-      ({ label, arg: args[label] })) } as const)
+      ({ label, arg: Term(args[label]) })) } as const)
 
-const Unop = (op: AST.UnaryExpr['op'], arg: AST.Expression) =>
-  ({ type: 'UnaryExpr', op, arg } as const)
-const Binop = (left: AST.Expression, op: AST.BinaryExpr['op'], right: AST.Expression) =>
-  ({ type: 'BinaryExpr', op, left, right } as const)
+const Unop = (op: AST.UnaryExpr['op'], arg: Term) =>
+  ({ type: 'UnaryExpr', op, arg: Term(arg) } as const)
+const Binop = (left: Term, op: AST.BinaryExpr['op'], right: Term) =>
+  ({ type: 'BinaryExpr', op, left: Term(left), right: Term(right) } as const)
 const CompareChain = (...chain: AST.BinaryExpr[]) =>
   ({ type: 'CompareChainExpr', chain } as const)
-const CondExpr = (test: AST.Expression, ifYes: AST.Expression, ifNo: AST.Expression) =>
-  ({ type: 'CondExpr', test, ifYes, ifNo } as const)
-const ArrowFunc = (params: string, body: AST.Expression | AST.Statement[]) =>
-  ({ type: 'ArrowFunc', params: params.split(' '), body } as const)
+const CondExpr = (test: Term, ifYes: Term, ifNo: Term) =>
+  ({ type: 'CondExpr', test: Term(test),
+    ifYes: Term(ifYes), ifNo: Term(ifNo) } as const)
+const ArrowFunc = (params: string, body: Term | AST.Statement[]) =>
+  ({ type: 'ArrowFunc', params: params.split(' '), body: Term(body) } as const)
 
-const LetStmt = (varName: string, expr: AST.Expression) =>
-  ({ type: 'LetStmt', varName, expr } as const)
-const ChangeStmt = (varName: string, expr: AST.Expression) =>
-  ({ type: 'ChangeStmt', varName, expr } as const)
-const ReturnStmt = (expr: AST.Expression) =>
-  ({ type: 'ReturnStmt', expr } as const)
-const EmitStmt = (expr: AST.Expression) =>
-  ({ type: 'EmitStmt', expr } as const)
-const DoStmt = (expr: AST.Expression) =>
-  ({ type: 'DoStmt', expr } as const)
+const LetStmt = (varName: string, expr: Term) =>
+  ({ type: 'LetStmt', varName, expr: Term(expr) } as const)
+const ChangeStmt = (varName: string, expr: Term) =>
+  ({ type: 'ChangeStmt', varName, expr: Term(expr) } as const)
+const ReturnStmt = (expr: Term) =>
+  ({ type: 'ReturnStmt', expr: Term(expr) } as const)
+const EmitStmt = (expr: Term) =>
+  ({ type: 'EmitStmt', expr: Term(expr) } as const)
+const DoStmt = (expr: Term) =>
+  ({ type: 'DoStmt', expr: Term(expr) } as const)
 const AfterGotStmt = (vars: string) =>
   ({ type: 'AfterGotStmt', vars: vars.split(' ') } as const)
 
-const StateDecl = (varName: string, expr: AST.Expression) =>
-  ({ type: 'StateDecl', varName, expr } as const)
-const WhenDecl = (event: AST.Expression, varName: string | null, body: AST.Statement[]) =>
-  ({ type: 'WhenDecl', event, varName, body } as const)
+const StateDecl = (varName: string, expr: Term) =>
+  ({ type: 'StateDecl', varName, expr: Term(expr) } as const)
+const WhenDecl = (event: Term, varName: string | null, body: AST.Statement[]) =>
+  ({ type: 'WhenDecl', event: Term(event), varName, body } as const)
 
 suite('AST parsing', () => {
   suite('primary exprs', () => {
     suite('identifiers', () => {
       test('basic this_is_valid', () => {
         const observed = parser.Expression.tryParse('this_is_valid')
-        const expected = Var('this_is_valid')
+        const expected = Term('this_is_valid')
         assert.deepStrictEqual(observed, expected)
       })
       test('invalid _foo, foo__bar, foo_, $foo', () => {
@@ -421,16 +430,16 @@ suite('AST parsing', () => {
     })
     suite('numerals', () => {
       test('basic nonnegative integers', () => {
-        assert.strictEqual(parser.Expression.tryParse('0'), '0')
-        assert.strictEqual(parser.Expression.tryParse('123'), '123')
+        assert.deepStrictEqual(parser.Expression.tryParse('0'),   Term('0'))
+        assert.deepStrictEqual(parser.Expression.tryParse('123'), Term('123'))
       })
       // TODO: decimals, exponential notation, hexadecimals?
     })
     suite('field access functions', () => {
       test('basic .field_name', () => {
         const observed = parser.Expression.tryParse('.field_name')
-        const expected = '.field_name'
-        assert.strictEqual(observed, expected)
+        const expected = Term('.field_name')
+        assert.deepStrictEqual(observed, expected)
       })
       test('no space allowed after dot ". field_name"', () => {
         assert(!parser.Expression.parse('. field_name').status)
@@ -439,54 +448,54 @@ suite('AST parsing', () => {
     suite('string literals', () => {
       test('basic "asdf"', () => {
         const observed = parser.Expression.tryParse('"asdf"')
-        const expected = '"asdf"'
+        const expected = Term('"asdf"')
         assert.deepStrictEqual(observed, expected)
       })
       test("basic 'asdf'", () => {
         const observed = parser.Expression.tryParse("'asdf'")
-        const expected = "'asdf'"
+        const expected = Term("'asdf'")
         assert.deepStrictEqual(observed, expected)
       })
       test('basic ""', () => {
         const observed = parser.Expression.tryParse('""')
-        const expected = '""'
+        const expected = Term('""')
         assert.deepStrictEqual(observed, expected)
       })
       test("basic ''", () => {
         const observed = parser.Expression.tryParse("''")
-        const expected = "''"
+        const expected = Term("''")
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping double-quotes', () => {
         const observed = parser.Expression.tryParse('"you could call it \\"weird\\", I guess"')
-        const expected = '"you could call it \\"weird\\", I guess"'
+        const expected = Term('"you could call it \\"weird\\", I guess"')
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping single-quotes', () => {
         const observed = parser.Expression.tryParse("'you could call it \\'weird\\', I guess'")
-        const expected = "'you could call it \\'weird\\', I guess'"
+        const expected = Term("'you could call it \\'weird\\', I guess'")
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline double-quotes', () => {
         const observed = parser.Expression.tryParse('"first line\nsecond line"')
-        const expected = '"first line\nsecond line"'
+        const expected = Term('"first line\nsecond line"')
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline single-quotes', () => {
         const observed = parser.Expression.tryParse("'first line\nsecond line'")
-        const expected = "'first line\nsecond line'"
+        const expected = Term("'first line\nsecond line'")
         assert.deepStrictEqual(observed, expected)
       })
       test('indented multiline double-quotes', () => {
         const indentedParser = parserAtIndent('  ')
         const observed = indentedParser.Expression.tryParse('"first\n  second\n    third\n  fourth"')
-        const expected = '"first\nsecond\n  third\nfourth"'
+        const expected = Term('"first\nsecond\n  third\nfourth"')
         assert.deepStrictEqual(observed, expected)
       })
       test('indented multiline single-quotes', () => {
         const indentedParser = parserAtIndent('  ')
         const observed = indentedParser.Expression.tryParse("'first\n  second\n    third\n  fourth'")
-        const expected = "'first\nsecond\n  third\nfourth'"
+        const expected = Term("'first\nsecond\n  third\nfourth'")
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline string requires indent', () => {
@@ -505,7 +514,7 @@ suite('AST parsing', () => {
           + '    }')
         const expected = ArrowFunc('x', [
           LetStmt('y', '"first\n  second\nthird"'),
-          ReturnStmt(Var('y')),
+          ReturnStmt('y'),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -587,12 +596,12 @@ suite('AST parsing', () => {
       })
       test('record field name punning {a}', () => {
         const observed = parser.Expression.tryParse('{a}')
-        const expected = RecordLiteral({ a: Var('a') })
+        const expected = RecordLiteral({ a: 'a' })
         assert.deepStrictEqual(observed, expected)
       })
       test('mixed obj { a: 1, b, c, }', () => {
         const observed = parser.Expression.tryParse('{ a: 1, b, c, }')
-        const expected = RecordLiteral({ a: '1', b: Var('b'), c: Var('c') })
+        const expected = RecordLiteral({ a: '1', b: 'b', c: 'c' })
         assert.deepStrictEqual(observed, expected)
       })
       test('invalid without comma {a b}', () => {
@@ -607,15 +616,15 @@ suite('AST parsing', () => {
         }`)
         const expected = RecordLiteral({
           a: Binop('1', '+', '1'),
-          b: CondExpr(Binop(Var('x'), '&&', Var('y')),
-            Var('z'),
-            CondExpr(Var('t'),
-              Var('w'),
-              CondExpr(Var('u'),
-                Binop(Var('v'), '+', Binop('2', '**', Unop('-', '2'))),
+          b: CondExpr(Binop('x', '&&', 'y'),
+            'z',
+            CondExpr('t',
+              'w',
+              CondExpr('u',
+                Binop('v', '+', Binop('2', '**', Unop('-', '2'))),
                 '3'))),
           c: RecordLiteral({ i: '0', j: '1', k: '2' }),
-          d: CondExpr(Var('foo'),
+          d: CondExpr('foo',
             RecordLiteral({ n: '123' }),
             RecordLiteral({ n: '321' })),
         })
@@ -647,27 +656,27 @@ suite('AST parsing', () => {
     suite('ArrowFunc', () => {
       test('basic x => x**2', () => {
         const observed = parser.Expression.tryParse('x => x**2')
-        const expected = ArrowFunc('x', Binop(Var('x'), '**', '2'))
+        const expected = ArrowFunc('x', Binop('x', '**', '2'))
         assert.deepStrictEqual(observed, expected)
       })
       test('looser than CondExpr from the left x => x ? 1 : -1', () => {
         const observed = parser.Expression.tryParse('x => x ? 1 : -1')
-        const expected = ArrowFunc('x', CondExpr(Var('x'), '1', Unop('-', '1')))
+        const expected = ArrowFunc('x', CondExpr('x', '1', Unop('-', '1')))
         assert.deepStrictEqual(observed, expected)
       })
       test('tighter than CondExpr from the right x ? y => y+1 : y => y+2', () => {
         const observed = parser.Expression.tryParse('x ? y => y+1 : y => y+2')
-        const expected = CondExpr(Var('x'),
-          ArrowFunc('y', Binop(Var('y'), '+', '1')),
-          ArrowFunc('y', Binop(Var('y'), '+', '2')))
+        const expected = CondExpr('x',
+          ArrowFunc('y', Binop('y', '+', '1')),
+          ArrowFunc('y', Binop('y', '+', '2')))
         assert.deepStrictEqual(observed, expected)
       })
       test('nested CondExpr & ArrowFunc', () => {
         // bad style, but it should still parse correctly
         const observed = parser.Expression.tryParse('x ? y => y ? 1 : 2 : y => y ? -1 : -2')
-        const expected = CondExpr(Var('x'),
-          ArrowFunc('y', CondExpr(Var('y'), '1', '2')),
-          ArrowFunc('y', CondExpr(Var('y'), Unop('-', '1'), Unop('-', '2'))))
+        const expected = CondExpr('x',
+          ArrowFunc('y', CondExpr('y', '1', '2')),
+          ArrowFunc('y', CondExpr('y', Unop('-', '1'), Unop('-', '2'))))
         assert.deepStrictEqual(observed, expected)
       })
       test('prohibit arrow func nested in exprs except CondExpr', () => {
@@ -694,8 +703,8 @@ suite('AST parsing', () => {
         const observed = indentedParser.Expression.tryParse(
           'x => { Let y = x + 1 ; Return 2*y }')
         const expected = ArrowFunc('x', [
-          LetStmt('y', Binop(Var('x'), '+', '1')),
-          ReturnStmt(Binop('2', '*', Var('y'))),
+          LetStmt('y', Binop('x', '+', '1')),
+          ReturnStmt(Binop('2', '*', 'y')),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -706,15 +715,15 @@ suite('AST parsing', () => {
           + '        Return 2*y\n'
           + '    }')
         const expected = ArrowFunc('x', [
-          LetStmt('y', Binop(Var('x'), '+', '1')),
-          ReturnStmt(Binop('2', '*', Var('y'))),
+          LetStmt('y', Binop('x', '+', '1')),
+          ReturnStmt(Binop('2', '*', 'y')),
         ])
         assert.deepStrictEqual(observed, expected)
       })
       test('record literal not allowed as expr w/o parens, same as JS x => { x }', () => {
         assert(!parser.Expression.parse('x => { x }').status)
         const observed = parser.Expression.tryParse('x => ({ x })')
-        const expected = ArrowFunc('x', RecordLiteral({ x: Var('x') }))
+        const expected = ArrowFunc('x', RecordLiteral({ x: 'x' }))
         assert.deepStrictEqual(observed, expected)
       })
     })
@@ -724,33 +733,33 @@ suite('AST parsing', () => {
     suite('FieldFunc, FieldAccessExpr, CallExpr', () => {
       test('basic MemberExpr record.field', () => {
         const observed = parser.Expression.tryParse('record.field')
-        const expected = FieldAccess(Var('record'), 'field')
+        const expected = FieldAccess('record', 'field')
         assert.deepStrictEqual(observed, expected)
       })
       test('basic prefix CallExpr f(x)', () => {
         const observed = parser.Expression.tryParse('f(x)')
-        const expected = FnCall(Var('f'), Var('x'))
+        const expected = FnCall('f', 'x')
         assert.deepStrictEqual(observed, expected)
       })
       test('basic infix CallExpr aka method-call value.func(arg)', () => {
         const observed = parser.Expression.tryParse('value.func(arg)')
-        const expected = MethodCall(Var('value'), Var('func'), Var('arg'))
+        const expected = MethodCall('value', 'func', 'arg')
         assert.deepStrictEqual(observed, expected)
       })
       test('call a field access function .field(record)', () => {
         const observed = parser.Expression.tryParse('.field(record)')
-        const expected = FnCall('.field', Var('record'))
+        const expected = FnCall('.field', 'record')
         assert.deepStrictEqual(observed, expected)
       })
       test('labeled arguments func(from: 1, to: 100)', () => {
         const observed = parser.Expression.tryParse('func(from: 1, to: 100)')
-        const expected = FnCallN(Var('func'), { from: '1', to: '100' })
+        const expected = FnCallN('func', { from: '1', to: '100' })
         assert.deepStrictEqual(observed, expected)
       })
       test('labeled method arguments thing.func(from: 1, to: 100)', () => {
         const observed = parser.Expression.tryParse('thing.func(from: 1, to: 100)')
         const expected =
-          MethodCallN(Var('thing'), Var('func'), { from: '1', to: '100' })
+          MethodCallN('thing', 'func', { from: '1', to: '100' })
         assert.deepStrictEqual(observed, expected)
       })
       test('altogether now: mapping a field func over a list', () => {
@@ -759,7 +768,7 @@ suite('AST parsing', () => {
         const expected = MethodCall(
           ArrayLiteral([RecordLiteral({ foo: '1', bar: "'whatever'" }),
             RecordLiteral({ foo: '2', bar: "'lol'" })]),
-          Var('each'),
+          'each',
           '.foo')
         assert.deepStrictEqual(observed, expected)
       })
@@ -838,7 +847,7 @@ suite('AST parsing', () => {
     suite('CompareExpr', () => {
       test('basic a != b', () => {
         const observed = parser.Expression.tryParse('a != b')
-        const expected = Binop(Var('a'), '!=', Var('b'))
+        const expected = Binop('a', '!=', 'b')
         assert.deepStrictEqual(observed, expected)
       })
       test('no chaining a != b != c', () => {
@@ -851,28 +860,28 @@ suite('AST parsing', () => {
       test('chaining', () => {
         const observed = parser.Expression.tryParse('a < b == c <= d < e')
         const expected = CompareChain(
-          Binop(Var('a'), '<',  Var('b')),
-          Binop(Var('b'), '==', Var('c')),
-          Binop(Var('c'), '<=', Var('d')),
-          Binop(Var('d'), '<',  Var('e')))
+          Binop('a', '<',  'b'),
+          Binop('b', '==', 'c'),
+          Binop('c', '<=', 'd'),
+          Binop('d', '<',  'e'))
         assert.deepStrictEqual(observed, expected)
       })
       test('improper chaining a < b > c', () => {
         assert(!parser.Expression.parse('a < b > c').status)
         const observed = parser.Expression.tryParse('a < (b > c)')
-        const expected = Binop(Var('a'), '<', Binop(Var('b'), '>', Var('c')))
+        const expected = Binop('a', '<', Binop('b', '>', 'c'))
         assert.deepStrictEqual(observed, expected)
       })
       test('chaining starting with equals a == b < c', () => {
         const observed = parser.Expression.tryParse('a == b < c')
         const expected = CompareChain(
-          Binop(Var('a'), '==', Var('b')), Binop(Var('b'), '<', Var('c')))
+          Binop('a', '==', 'b'), Binop('b', '<', 'c'))
         assert.deepStrictEqual(observed, expected)
       })
       test('chaining starting with equals a == b > c', () => {
         const observed = parser.Expression.tryParse('a == b > c')
         const expected = CompareChain(
-          Binop(Var('a'), '==', Var('b')), Binop(Var('b'), '>', Var('c')))
+          Binop('a', '==', 'b'), Binop('b', '>', 'c'))
         assert.deepStrictEqual(observed, expected)
       })
     })
@@ -880,16 +889,16 @@ suite('AST parsing', () => {
     suite('logical boolean operators && and ||', () => {
       test('&& conventionally has higher precedence than ||', () => {
         const observed = parser.Expression.tryParse('a && b || c && d')
-        const expected = Binop(Binop(Var('a'), '&&', Var('b')),
-          '||', Binop(Var('c'), '&&', Var('d')))
+        const expected = Binop(Binop('a', '&&', 'b'),
+          '||', Binop('c', '&&', 'd'))
         assert.deepStrictEqual(observed, expected)
       })
       test('logical and arithmetic precedence', () => {
         const observed = parser.Expression.tryParse('a && b == c > d && e')
         const expected = Binop(
-          Binop(Var('a'), '&&',
-            CompareChain(Binop(Var('b'), '==', Var('c')), Binop(Var('c'), '>', Var('d')))),
-          '&&', Var('e'))
+          Binop('a', '&&',
+            CompareChain(Binop('b', '==', 'c'), Binop('c', '>', 'd'))),
+          '&&', 'e')
         assert.deepStrictEqual(observed, expected)
       })
     })
@@ -897,24 +906,24 @@ suite('AST parsing', () => {
     suite('CondExpr', () => {
       test('basic a ? b : c', () => {
         const observed = parser.Expression.tryParse('a ? b : c')
-        const expected = CondExpr(Var('a'), Var('b'), Var('c'))
+        const expected = CondExpr('a', 'b', 'c')
         assert.deepStrictEqual(observed, expected)
       })
       test('precedence with comparisons', () => {
         const observed = parser.Expression.tryParse('a == b && c < d < e ? f + 2 : g**3*4')
         const expected = CondExpr(
-          Binop(Binop(Var('a'), '==', Var('b')),
+          Binop(Binop('a', '==', 'b'),
             '&&', CompareChain(
-              Binop(Var('c'), '<', Var('d')), Binop(Var('d'), '<', Var('e')))),
-          Binop(Var('f'), '+', '2'),
-          Binop(Binop(Var('g'), '**', '3'), '*', '4'))
+              Binop('c', '<', 'd'), Binop('d', '<', 'e'))),
+          Binop('f', '+', '2'),
+          Binop(Binop('g', '**', '3'), '*', '4'))
         assert.deepStrictEqual(observed, expected)
       })
       test('nested conditionals', () => {
         const observed = parser.Expression.tryParse('a ? b ? c : d ? e : f : g ? h : i')
-        const expected = CondExpr(Var('a'),
-          CondExpr(Var('b'), Var('c'), CondExpr(Var('d'), Var('e'), Var('f'))),
-          CondExpr(Var('g'), Var('h'), Var('i')))
+        const expected = CondExpr('a',
+          CondExpr('b', 'c', CondExpr('d', 'e', 'f')),
+          CondExpr('g', 'h', 'i'))
         assert.deepStrictEqual(observed, expected)
       })
       test('mis-nested conditionals', () => {
@@ -927,8 +936,8 @@ suite('AST parsing', () => {
             c ? d :
             e ? f :
             g`)
-        const expected = CondExpr(Var('a'), Var('b'),
-          CondExpr(Var('c'), Var('d'), CondExpr(Var('e'), Var('f'), Var('g'))))
+        const expected = CondExpr('a', 'b',
+          CondExpr('c', 'd', CondExpr('e', 'f', 'g')))
         assert.deepStrictEqual(observed, expected)
       })
       test('if-elif-elif-else, prefix', () => {
@@ -937,8 +946,8 @@ suite('AST parsing', () => {
           : c ? d
           : e ? f
           : g`)
-        const expected = CondExpr(Var('a'), Var('b'), CondExpr(
-          Var('c'), Var('d'), CondExpr(Var('e'), Var('f'), Var('g'))))
+        const expected = CondExpr('a', 'b', CondExpr(
+          'c', 'd', CondExpr('e', 'f', 'g')))
         assert.deepStrictEqual(observed, expected)
       })
     })
@@ -954,7 +963,7 @@ suite('AST parsing', () => {
       test('bigger expression', () => {
         const observed = parser.Statement.tryParse('Let y = 2*x**3*4')
         const expected = LetStmt('y',
-          Binop(Binop('2', '*', Binop(Var('x'), '**', '3')), '*', '4'))
+          Binop(Binop('2', '*', Binop('x', '**', '3')), '*', '4'))
         assert.deepStrictEqual(observed, expected)
       })
       test('less whitespace Let x=1+2', () => {
@@ -996,8 +1005,8 @@ suite('AST parsing', () => {
             'When evt:\n'
           + '    Change x to x+1'
         )
-        const expected = WhenDecl(Var('evt'), null, [
-          ChangeStmt('x', Binop(Var('x'), '+', '1')),
+        const expected = WhenDecl('evt', null, [
+          ChangeStmt('x', Binop('x', '+', '1')),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1009,9 +1018,9 @@ suite('AST parsing', () => {
           + '    // also the other counter\n'
           + '    Change y to y+2'
         )
-        const expected = WhenDecl(Var('evt'), null, [
-          ChangeStmt('x', Binop(Var('x'), '+', '1')),
-          ChangeStmt('y', Binop(Var('y'), '+', '2')),
+        const expected = WhenDecl('evt', null, [
+          ChangeStmt('x', Binop('x', '+', '1')),
+          ChangeStmt('y', Binop('y', '+', '2')),
         ])
         assert.deepStrictEqual(observed, expected)
 
@@ -1045,8 +1054,8 @@ suite('AST parsing', () => {
           + '    // done!\n'
         )
         const expected = [
-          WhenDecl(Var('evt'), null, [
-            ChangeStmt('x', Binop(Var('x'), '+', '1')),
+          WhenDecl('evt', null, [
+            ChangeStmt('x', Binop('x', '+', '1')),
           ])
         ]
         assert.deepStrictEqual(observed, expected)
@@ -1061,9 +1070,9 @@ suite('AST parsing', () => {
           + '  \n' // another blank line indented wrong
           + '    Change y to y+2'
         )
-        const expected = WhenDecl(Var('evt'), null, [
-          ChangeStmt('x', Binop(Var('x'), '+', '1')),
-          ChangeStmt('y', Binop(Var('y'), '+', '2')),
+        const expected = WhenDecl('evt', null, [
+          ChangeStmt('x', Binop('x', '+', '1')),
+          ChangeStmt('y', Binop('y', '+', '2')),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1080,9 +1089,9 @@ suite('AST parsing', () => {
           + '        Return { z, f }\n'
           + '    }')
         const expected = ArrowFunc('x', [
-          LetStmt('f', ArrowFunc('y', [ReturnStmt(Binop(Var('y'), '+', '1'))])),
-          LetStmt('z', Binop(Var('x'), '+', '2')),
-          ReturnStmt(RecordLiteral({ z: Var('z'), f: Var('f') })),
+          LetStmt('f', ArrowFunc('y', [ReturnStmt(Binop('y', '+', '1'))])),
+          LetStmt('z', Binop('x', '+', '2')),
+          ReturnStmt(RecordLiteral({ z: 'z', f: 'f' })),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1096,9 +1105,9 @@ suite('AST parsing', () => {
           + '        Return { z, f } // unmatched open-quote in comment: " \n'
           + '    }')
         const expected = ArrowFunc('x', [
-          LetStmt('f', ArrowFunc('y', [ReturnStmt(Binop(Var('y'), '+', '1'))])),
-          LetStmt('z', Binop(Var('x'), '+', '2')),
-          ReturnStmt(RecordLiteral({ z: Var('z'), f: Var('f') })),
+          LetStmt('f', ArrowFunc('y', [ReturnStmt(Binop('y', '+', '1'))])),
+          LetStmt('z', Binop('x', '+', '2')),
+          ReturnStmt(RecordLiteral({ z: 'z', f: 'f' })),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1154,8 +1163,8 @@ suite('AST parsing', () => {
             'When btnClick:\n'
           + '    Change x to x+1'
         )
-        const expected = WhenDecl(Var('btnClick'), null, [
-          ChangeStmt('x', Binop(Var('x'), '+', '1')),
+        const expected = WhenDecl('btnClick', null, [
+          ChangeStmt('x', Binop('x', '+', '1')),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1164,8 +1173,8 @@ suite('AST parsing', () => {
             'When btnClick with context:\n'
           + '    Change x to context'
         )
-        const expected = WhenDecl(Var('btnClick'), 'context', [
-          ChangeStmt('x', Var('context')),
+        const expected = WhenDecl('btnClick', 'context', [
+          ChangeStmt('x', 'context'),
         ])
         assert.deepStrictEqual(observed, expected)
       })
@@ -1186,8 +1195,8 @@ suite('ProgramParser', () => {
     )
     const expected = [
       StateDecl('counter', '0'),
-      WhenDecl(Var('btnClick'), null, [
-        ChangeStmt('counter', Binop(Var('counter'), '+', '1')),
+      WhenDecl('btnClick', null, [
+        ChangeStmt('counter', Binop('counter', '+', '1')),
       ]),
     ]
     assert.deepStrictEqual(observed, expected)
@@ -1201,8 +1210,8 @@ suite('ProgramParser', () => {
     )
     const expected = [
       StateDecl('counter', '0'),
-      WhenDecl(Var('btnClick'), null, [
-        ChangeStmt('counter', Binop(Var('counter'), '+', '1')),
+      WhenDecl('btnClick', null, [
+        ChangeStmt('counter', Binop('counter', '+', '1')),
       ]),
     ]
     assert.deepStrictEqual(observed, expected)
@@ -1221,8 +1230,8 @@ suite('ProgramParser', () => {
     )
     const expected = [
       StateDecl('counter', '0'),
-      WhenDecl(Var('btnClick'), null, [
-        ChangeStmt('counter', Binop(Var('counter'), '+', '1')),
+      WhenDecl('btnClick', null, [
+        ChangeStmt('counter', Binop('counter', '+', '1')),
       ]),
     ]
     assert.deepStrictEqual(observed, expected)
@@ -1240,8 +1249,8 @@ suite('ProgramParser', () => {
     )
     const expected = [
       StateDecl('counter', '0'),
-      WhenDecl(Var('btnClick'), null, [
-        ChangeStmt('counter', Binop(Var('counter'), '+', '1')),
+      WhenDecl('btnClick', null, [
+        ChangeStmt('counter', Binop('counter', '+', '1')),
       ]),
     ]
     assert.deepStrictEqual(observed, expected)
@@ -1925,27 +1934,26 @@ suite('codegen', () => {
   } as const
   suite('primary exprs', () => {
     test('scalars (numerals, boolean and string literals)', () => {
-      assert.strictEqual(codegenExpr(ctx, '123'   ), '123')
-      assert.strictEqual(codegenExpr(ctx, '"asdf"'), '"asdf"')
-      assert.strictEqual(codegenExpr(ctx, 'true'  ), 'true')
+      assert.strictEqual(codegenExpr(ctx, Term('123')),    '123')
+      assert.strictEqual(codegenExpr(ctx, Term('"asdf"')), '"asdf"')
     })
     test('FieldFunc', () => {
-      const observed = codegenExpr(ctx, '.field_name')
+      const observed = codegenExpr(ctx, Term('.field_name'))
       const expected = '(record => record.field_name)'
       assert.strictEqual(observed, expected)
     })
     test('Variable', () => {
-      const observed = codegenExpr(ctx, Var('foo'))
+      const observed = codegenExpr(ctx, Term('foo'))
       const expected = 'foo_'
       assert.strictEqual(observed, expected)
 
       assert.throws(() => {
-        codegenExpr(ctx, Var('asdf'))
+        codegenExpr(ctx, Term('asdf'))
       })
     })
     test('ArrayLiteral', () => {
       const observed1 = codegenExpr(ctx,
-        ArrayLiteral([ '1', Var('foo'), '3' ]))
+        ArrayLiteral([ '1', 'foo', '3' ]))
       const expected1 = '[1, foo_, 3]'
       assert.strictEqual(observed1, expected1)
 
@@ -1963,7 +1971,7 @@ suite('codegen', () => {
       assert.strictEqual(observed1, expected1)
 
       const observed2 = codegenExpr(ctx,
-        RecordLiteral({ a: '1', b: Var('foo'), c: '3' }))
+        RecordLiteral({ a: '1', b: 'foo', c: '3' }))
       const expected2 = '{\n'
         + '  a: 1,\n'
         + '  b: foo_,\n'
@@ -1990,47 +1998,47 @@ suite('codegen', () => {
   })
   suite('FieldAccessExpr', () => {
     test('basic', () => {
-      const observed = codegenExpr(ctx, FieldAccess(Var('foo'), 'field'))
+      const observed = codegenExpr(ctx, FieldAccess('foo', 'field'))
       const expected = 'foo_.field'
       assert.strictEqual(observed, expected)
     })
     test('precedence: no parens needed x.y.foo().z', () => {
       const observed = codegenExpr(
         { ...ctx, scope: { ...ctx.scope, x: 'x' } },
-        FieldAccess(MethodCall(FieldAccess(Var('x'), 'y'), Var('foo')), 'z'))
+        FieldAccess(MethodCall(FieldAccess('x', 'y'), 'foo'), 'z'))
       const expected = 'foo_(x.y).z'
       assert.strictEqual(observed, expected)
     })
     test('precedence: need parens (x + y).z', () => {
       const observed = codegenExpr(
         { ...ctx, scope: { x: 'x', y: 'y' } },
-        FieldAccess(Binop(Var('x'), '+', Var('y')), 'z'))
+        FieldAccess(Binop('x', '+', 'y'), 'z'))
       const expected = '(x + y).z'
       assert.strictEqual(observed, expected)
     })
   })
   suite('CallExprs', () => {
     test('basic', () => {
-      const observed = codegenExpr(ctx, FnCall(Var('foo'), '1'))
+      const observed = codegenExpr(ctx, FnCall('foo', '1'))
       const expected = 'foo_(1)'
       assert.deepStrictEqual(observed, expected)
     })
     test('method call', () => {
-      const observed = codegenExpr(ctx, MethodCall('1', Var('foo'), '2'))
+      const observed = codegenExpr(ctx, MethodCall('1', 'foo', '2'))
       const expected = 'foo_(1, 2)'
       assert.deepStrictEqual(observed, expected)
     })
     test('precedence: need parens (x ? foo : bar)(1)', () => {
       const observed = codegenExpr(
         { ...ctx, scope: { x: 'y', foo: 'foo', bar: 'bar' } },
-        FnCall(CondExpr(Var('x'), Var('foo'), Var('bar')), '1'))
+        FnCall(CondExpr('x', 'foo', 'bar'), '1'))
       const expected = '(y ? foo : bar)(1)'
       assert.deepStrictEqual(observed, expected)
     })
     test('precedence: need parens (x + y).foo(1)', () => {
       const observed = codegenExpr(
         { ...ctx, scope: { ...ctx.scope, x: 'x', y: 'y' } },
-        MethodCall(Binop(Var('x'), '+', Var('y')), Var('foo'), '1'))
+        MethodCall(Binop('x', '+', 'y'), 'foo', '1'))
       const expected = 'foo_(x + y, 1)'
       assert.deepStrictEqual(observed, expected)
     })
@@ -2095,13 +2103,13 @@ suite('codegen', () => {
         Binop(
           Binop(
             Binop(
-              Binop(Binop(Var('a'), '||', Var('b')), '&&', Var('c')),
+              Binop(Binop('a', '||', 'b'), '&&', 'c'),
               '&&',
-              Binop(Var('d'), '&&', Binop(Var('e'), '||', Var('f')))),
+              Binop('d', '&&', Binop('e', '||', 'f'))),
             '||',
-            Var('g')),
+            'g'),
           '||',
-          Binop(Var('h'), '||', Binop(Var('i'), '&&', Var('j')))))
+          Binop('h', '||', Binop('i', '&&', 'j'))))
       const expected = '((a || b) && c && d && (e || f)) || g || h || (i && j)'
       assert.strictEqual(observed, expected)
     })
@@ -2146,17 +2154,17 @@ suite('codegen', () => {
       const scope = { a: 'a', b: 'b', c: 'c', d: 'd', e: 'e', f: 'f',
         g: 'g', h: 'h', i: 'i', j: 'j' }
       const observed1 = codegenExpr({ ...ctx, scope },
-        CondExpr(Var('a'), Var('b'), CondExpr(Var('c'), Var('d'), Var('e'))))
+        CondExpr('a', 'b', CondExpr('c', 'd', 'e')))
       const expected1 = 'a ? b : c ? d : e'
       assert.strictEqual(observed1, expected1)
 
       const observed2 = codegenExpr({ ...ctx, scope },
-        CondExpr(Var('a'), CondExpr(Var('b'), Var('c'), Var('d')), Var('e')))
+        CondExpr('a', CondExpr('b', 'c', 'd'), 'e'))
       const expected2 = 'a ? b ? c : d : e'
       assert.strictEqual(observed2, expected2)
 
       const observed3 = codegenExpr({ ...ctx, scope },
-        CondExpr(CondExpr(Var('a'), Var('b'), Var('c')), Var('d'), Var('e')))
+        CondExpr(CondExpr('a', 'b', 'c'), 'd', 'e'))
       const expected3 = '(a ? b : c) ? d : e'
       assert.strictEqual(observed3, expected3)
     })
@@ -2171,37 +2179,37 @@ suite('codegen', () => {
   })
   suite('ArrowFunc', () => {
     test('basic', () => {
-      const observed1 = codegenExpr(ctx, ArrowFunc('x', Binop(Var('x'), '**', '2')))
+      const observed1 = codegenExpr(ctx, ArrowFunc('x', Binop('x', '**', '2')))
       const expected1 = 'x => x**2'
       assert.strictEqual(observed1, expected1)
 
       const observed2 = codegenExpr(ctx,
-        ArrowFunc('x y', Binop(Var('x'), '+', Var('y'))))
+        ArrowFunc('x y', Binop('x', '+', 'y')))
       const expected2 = '(x, y) => x + y'
       assert.strictEqual(observed2, expected2)
     })
     test('precedence and parenthesization', () => {
       const ctx = { indent: '', scope: { x: 'x' } }
       const observed1 = codegenExpr(ctx,
-        ArrowFunc('x', CondExpr(Var('x'), '1', Unop('-', '1'))))
+        ArrowFunc('x', CondExpr('x', '1', Unop('-', '1'))))
       const expected1 = 'x => x ? 1 : -1'
       assert.strictEqual(observed1, expected1)
 
-      const observed2 = codegenExpr(ctx, CondExpr(Var('x'),
-        ArrowFunc('y', Binop(Var('y'), '+', '1')),
-        ArrowFunc('y', Binop(Var('y'), '+', '2'))))
+      const observed2 = codegenExpr(ctx, CondExpr('x',
+        ArrowFunc('y', Binop('y', '+', '1')),
+        ArrowFunc('y', Binop('y', '+', '2'))))
       const expected2 = 'x ? (y => y + 1) : (y => y + 2)'
       assert.strictEqual(observed2, expected2)
 
-      const observed3 = codegenExpr(ctx, CondExpr(Var('x'),
-        ArrowFunc('y', CondExpr(Var('y'), '1', '2')),
-        ArrowFunc('y', CondExpr(Var('y'), Unop('-', '1'), Unop('-', '2')))))
+      const observed3 = codegenExpr(ctx, CondExpr('x',
+        ArrowFunc('y', CondExpr('y', '1', '2')),
+        ArrowFunc('y', CondExpr('y', Unop('-', '1'), Unop('-', '2')))))
       const expected3 = 'x ? (y => y ? 1 : 2) : (y => y ? -1 : -2)'
       assert.strictEqual(observed3, expected3)
     })
     test('JS reserved words', () => {
       const observed = codegenExpr(ctx, ArrowFunc('try new function',
-        Binop(Binop(Var('try'), '+', Var('new')), '+', Var('function'))))
+        Binop(Binop('try', '+', 'new'), '+', 'function')))
       const expected = '(try_, new_, function_) => try_ + new_ + function_'
       assert.strictEqual(observed, expected)
     })
@@ -2209,22 +2217,22 @@ suite('codegen', () => {
   suite('simple statements', () => {
     test('ReturnStmt', () => {
       const observed = codegenStmt(ctx,
-        ReturnStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
+        ReturnStmt(Binop(Binop('2', '*', 'foo'), '+', '1')))
       const expected = { code: 'return 2*foo_ + 1;\n', newVar: undefined }
       assert.deepStrictEqual(observed, expected)
     })
     test('EmitStmt', () => {
       const observed = codegenStmt(ctx,
-        EmitStmt(Binop(Binop('2', '*', Var('foo')), '+', '1')))
+        EmitStmt(Binop(Binop('2', '*', 'foo'), '+', '1')))
       const expected = { code: '$emit(2*foo_ + 1);\n', newVar: undefined }
       assert.deepStrictEqual(observed, expected)
     })
     test('DoStmt', () => {
-      const observed1 = codegenStmt(ctx, DoStmt(Var('foo')))
+      const observed1 = codegenStmt(ctx, DoStmt('foo'))
       const expected1 = { code: 'foo_();\n', newVar: undefined }
       assert.deepStrictEqual(observed1, expected1)
 
-      const observed2 = codegenStmt(ctx, DoStmt(FnCall(Var('foo'), '1')))
+      const observed2 = codegenStmt(ctx, DoStmt(FnCall('foo', '1')))
       const expected2 = { code: 'foo_(1)();\n', newVar: undefined }
       assert.deepStrictEqual(observed2, expected2)
     })
@@ -2232,7 +2240,7 @@ suite('codegen', () => {
   suite('LetStmt', () => {
     test('basic arrow function', () => {
       const observed = codegenExpr(ctx, ArrowFunc('x', [
-        LetStmt('y', Binop(Var('x'), '+', '1')),
+        LetStmt('y', Binop('x', '+', '1')),
         ReturnStmt('y'),
       ]))
       const expected = 'x => {\n'
@@ -2243,8 +2251,8 @@ suite('codegen', () => {
     })
     test('JS reserved words', () => {
       const observed = codegenExpr(ctx, ArrowFunc('for', [
-        LetStmt('return', Binop(Var('for'), '+', '1')),
-        ReturnStmt(Var('return')),
+        LetStmt('return', Binop('for', '+', '1')),
+        ReturnStmt('return'),
       ]))
       const expected = 'for_ => {\n'
         + '  const return_ = for_ + 1;\n'
