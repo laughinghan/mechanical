@@ -116,8 +116,9 @@ export namespace TokenTree {
 
   export function tokenize(source: string): string[] {
     // TODO: decimals, E notation, numeric separators
-    return source.match(/( *(\/\/[^\n]*)?\n)+| +|\d+[\d_]*|"(\\"|[^"])*"|'(\\'|[^'])*'|\.\w+|\w+|\*\*|==|!=|<=|>=|=>|&&|\|\||[\d\D]/g) || []
-    // the [\d\D] is to match any character, since `.` doesn't match newline-like characters
+    return source.match(/( *(\/\/[^\n]*)?\n)+| +|\d+[\d_]*|"(\\"|[^"])*"|'(\\'|[^'])*'|\.\w+|\w+|\*\*|==|!=|<=|>=|=>|&&|\|\||\D/g) || []
+    // the \D is to match miscellaneous characters, since `.` doesn't
+    // match newline-like characters
   }
 
   type Mismatch = { open?: Token, close?: Token }
