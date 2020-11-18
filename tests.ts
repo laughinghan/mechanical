@@ -1908,7 +1908,7 @@ suite('Type System', () => {
         }
       )))
 
-      test('absorpion', () => fc.assert(fc.property(
+      test('absorption', () => fc.assert(fc.property(
         arb_type_pairs(arb_nontrivial_type(100), (A, B) => [A, B] as const),
         pairs => {
           for (const [A, B] of pairs) {
