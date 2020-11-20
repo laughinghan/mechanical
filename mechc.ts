@@ -97,11 +97,19 @@ import {
 //     https://blog.rust-lang.org/2018/12/21/Procedural-Macros-in-Rust-2018.html#whats-inside-a-tokenstream
 
 export namespace TokenTree {
-  export type Seq = ReadonlyArray<Token | Group>
+  export type Seq = ReadonlyArray<AnyToken | Group>
 
-  interface Token extends Span {
-    readonly type: 'Ident' | 'Punct' | 'UnmatchedDelim'
-                 | 'Numeral' | 'StringLiteral' | 'FieldFunc' // | 'Hashtag'
+  // token variants have to be split up like this for type narrowing to work
+  type AnyToken =
+      Token<'Ident'>
+    | Token<'Punct'>
+    | Token<'UnmatchedDelim'>
+    | Token<'Numeral'>
+    | Token<'StringLiteral'>
+    | Token<'FieldFunc'>
+    //| Token<'Hashtag'>
+  interface Token<T> extends Span {
+    readonly type: T
     readonly val: string
   }
   interface Group extends Span {
@@ -121,7 +129,7 @@ export namespace TokenTree {
     // match newline-like characters
   }
 
-  type Mismatch = { open?: Token, close?: Token }
+  type Mismatch = { open?: Token<'Punct' | 'UnmatchedDelim'>, close?: Token<'UnmatchedDelim'> }
   type ParseResult = { tokens: Seq, n: number, srcN: number, mismatches: Mismatch[] }
   function parseSeq(tokens: string[], i: number, srcI: number, indent: number, prevIndent: number, closeDelim: null | ')' | ']' | '}', openI: number, openSrcI: number): ParseResult {
     const seq: Seq[number][] = []
@@ -232,7 +240,7 @@ export namespace TokenTree {
         continue
       }
       // otherwise, emit token
-      let type: Token['type'] = 'Punct'
+      let type: AnyToken['type'] = 'Punct'
       const ch = token.charAt(0), chCode = token.charCodeAt(0)
       if (ch === '_'
         || (0x41 <= chCode && chCode <= 0x5A) // letters A-Z
@@ -392,6 +400,28 @@ export namespace AST {
   }
 
   export type TopLevel = StateDecl | WhenDecl | DoStmt | GetDoStmt
+
+  type ParseError = { token: TokenTree.Seq[number] }
+  export function parseExpr(tokens: TokenTree.Seq, i: number): {
+    expr?: AST.Expression, n: number, errors: ParseError[]
+  } {
+    let n = 0, errors: ParseError[] = []
+    const result = (expr: AST.Expression) => ({ expr, n, errors })
+    const token = tokens[i]
+    switch (token.type) {
+      case 'Ident':
+        return result({ type: 'Variable', name: token.val })
+      case 'Numeral':
+      case 'StringLiteral':
+      case 'FieldFunc':
+        delete (token as any).i
+        delete (token as any).length
+        // ^ temporary, for tests, TODO: remove
+        return result(token)
+      default:
+        throw `parseExpr() of token type '${token.type}' not yet implemented`
+    }
+  }
 }
 
 // who says you can't do left-recursion in a top-down parser? Come at me!

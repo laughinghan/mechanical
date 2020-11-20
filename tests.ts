@@ -414,10 +414,15 @@ const WhenDecl = (event: Term, varName: string | null, body: AST.Statement[]) =>
   ({ type: 'WhenDecl', event: Term(event), varName, body } as const)
 
 suite('AST parsing', () => {
+  function tryParseExpr(source: string): AST.Expression {
+    const result = AST.parseExpr(TokenTree.parse(source).tokens, 0)
+    assert(result.expr)
+    return result.expr
+  }
   suite('primary exprs', () => {
     suite('identifiers', () => {
       test('basic this_is_valid', () => {
-        const observed = parser.Expression.tryParse('this_is_valid')
+        const observed = tryParseExpr('this_is_valid')
         const expected = Term('this_is_valid')
         assert.deepStrictEqual(observed, expected)
       })
@@ -430,14 +435,14 @@ suite('AST parsing', () => {
     })
     suite('numerals', () => {
       test('basic nonnegative integers', () => {
-        assert.deepStrictEqual(parser.Expression.tryParse('0'),   Term('0'))
-        assert.deepStrictEqual(parser.Expression.tryParse('123'), Term('123'))
+        assert.deepStrictEqual(tryParseExpr('0'),   Term('0'))
+        assert.deepStrictEqual(tryParseExpr('123'), Term('123'))
       })
       // TODO: decimals, exponential notation, hexadecimals?
     })
     suite('field access functions', () => {
       test('basic .field_name', () => {
-        const observed = parser.Expression.tryParse('.field_name')
+        const observed = tryParseExpr('.field_name')
         const expected = Term('.field_name')
         assert.deepStrictEqual(observed, expected)
       })
@@ -447,42 +452,42 @@ suite('AST parsing', () => {
     })
     suite('string literals', () => {
       test('basic "asdf"', () => {
-        const observed = parser.Expression.tryParse('"asdf"')
+        const observed = tryParseExpr('"asdf"')
         const expected = Term('"asdf"')
         assert.deepStrictEqual(observed, expected)
       })
       test("basic 'asdf'", () => {
-        const observed = parser.Expression.tryParse("'asdf'")
+        const observed = tryParseExpr("'asdf'")
         const expected = Term("'asdf'")
         assert.deepStrictEqual(observed, expected)
       })
       test('basic ""', () => {
-        const observed = parser.Expression.tryParse('""')
+        const observed = tryParseExpr('""')
         const expected = Term('""')
         assert.deepStrictEqual(observed, expected)
       })
       test("basic ''", () => {
-        const observed = parser.Expression.tryParse("''")
+        const observed = tryParseExpr("''")
         const expected = Term("''")
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping double-quotes', () => {
-        const observed = parser.Expression.tryParse('"you could call it \\"weird\\", I guess"')
+        const observed = tryParseExpr('"you could call it \\"weird\\", I guess"')
         const expected = Term('"you could call it \\"weird\\", I guess"')
         assert.deepStrictEqual(observed, expected)
       })
       test('escaping single-quotes', () => {
-        const observed = parser.Expression.tryParse("'you could call it \\'weird\\', I guess'")
+        const observed = tryParseExpr("'you could call it \\'weird\\', I guess'")
         const expected = Term("'you could call it \\'weird\\', I guess'")
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline double-quotes', () => {
-        const observed = parser.Expression.tryParse('"first line\nsecond line"')
+        const observed = tryParseExpr('"first line\nsecond line"')
         const expected = Term('"first line\nsecond line"')
         assert.deepStrictEqual(observed, expected)
       })
       test('multiline single-quotes', () => {
-        const observed = parser.Expression.tryParse("'first line\nsecond line'")
+        const observed = tryParseExpr("'first line\nsecond line'")
         const expected = Term("'first line\nsecond line'")
         assert.deepStrictEqual(observed, expected)
       })

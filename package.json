@@ -18,7 +18,7 @@
   "homepage": "https://github.com/laughinghan/mechanical#readme",
   "dependencies": {
     "@types/mocha": "^7.0.2",
-    "@types/node": "^13.9.0",
+    "@types/node": "^13.13.31",
     "@types/parsimmon": "^1.10.1",
     "fast-check": "^2.6.0",
     "mocha": "^7.1.1",
