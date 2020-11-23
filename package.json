@@ -11,7 +11,7 @@
     "url": "git+https://github.com/laughinghan/mechanical.git"
   },
   "author": "Han Seoul-Oh <laughinghan@gmail.com> (https://github.com/laughinghan)",
-  "license": "(BlueOak-1.0.0 OR MIT)",
+  "license": "(MIT OR BlueOak-1.0.0)",
   "bugs": {
     "url": "https://github.com/laughinghan/mechanical/issues"
   },
