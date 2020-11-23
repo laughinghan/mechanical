@@ -187,7 +187,9 @@ export namespace TokenTree {
           lookahead && lookahead.endsWith(' ') ? lookahead.length : 0
         // if unchanged indent level from current, emit newline token
         if (lookaheadIndent === indent) {
-          seq.push({ type: 'Punct', val: '\n', i: srcJ, length: token.length })
+          if (j > 0) { // ignore "virtual" newline (see parse())
+            seq.push({ type: 'Punct', val: '\n', i: srcJ, length: token.length })
+          }
           j += 1 + (lookaheadIndent ? 1 : 0)
           srcJ += token.length + lookaheadIndent
           continue
@@ -263,7 +265,8 @@ export namespace TokenTree {
   }
 
   export function parse(source: string): { tokens: Seq, mismatches: Mismatch[] } {
-    return parseSeq(tokenize(source), 0, 0, 0, NaN, null, NaN, NaN)
+    // prefix with "virtual" newline to handle leading indent
+    return parseSeq(['\n'].concat(tokenize(source)), 0, -1, 0, NaN, null, NaN, NaN)
   }
 }
 

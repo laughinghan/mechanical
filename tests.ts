@@ -273,6 +273,29 @@ suite('TokenTree parsing', () => {
       cleanup(observed)
       assert.deepStrictEqual(observed, expected)
     })
+    test('leading indent', () => {
+      const observed = parseAndCheck(
+          '  foo\n'
+        + '  bar\n'
+        + '    qux\n'
+        + 'asdf\n')
+      const expected = {
+        tokens: [
+          { type: 'Group', delims: 'indent', nested: [
+            { type: 'Ident', val: 'foo' },
+            { type: 'Punct', val: '\n' },
+            { type: 'Ident', val: 'bar' },
+            { type: 'Group', delims: 'indent', nested: [
+              { type: 'Ident', val: 'qux' },
+            ]},
+          ]},
+          { type: 'Ident', val: 'asdf' },
+        ],
+        mismatches: [],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
     test('spacing in and around delimiter-groups', () => {
       const observed = parseAndCheck('(1 + ( -2 * 3) + [5  ])')
       const expected = {
