@@ -555,17 +555,17 @@ suite('AST parsing', () => {
     })
     suite('array literals', () => {
       test('basic [1,2,3]', () => {
-        const observed = parser.Expression.tryParse('[ 1, 2, 3 ]')
+        const observed = tryParseExpr('[ 1, 2, 3 ]')
         const expected = ArrayLiteral([ '1', '2', '3' ])
         assert.deepStrictEqual(observed, expected)
       })
       test('basic empty []', () => {
-        const observed = parser.Expression.tryParse('[]')
+        const observed = tryParseExpr('[]')
         const expected = ArrayLiteral([])
         assert.deepStrictEqual(observed, expected)
       })
       test('trailing comma [1,2,]', () => {
-        const observed = parser.Expression.tryParse('[ 1, 2, ]')
+        const observed = tryParseExpr('[ 1, 2, ]')
         const expected = ArrayLiteral([ '1', '2' ])
         assert.deepStrictEqual(observed, expected)
       })

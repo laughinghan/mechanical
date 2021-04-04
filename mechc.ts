@@ -404,12 +404,12 @@ export namespace AST {
 
   export type TopLevel = StateDecl | WhenDecl | DoStmt | GetDoStmt
 
-  type ParseError = { token: TokenTree.Seq[number] }
+  type ParseError = { i: number, length?: number, code: string, msg: string }
   export function parseExpr(tokens: TokenTree.Seq, i: number): {
     expr?: AST.Expression, n: number, errors: ParseError[]
   } {
-    let n = 0, errors: ParseError[] = []
-    const result = (expr: AST.Expression) => ({ expr, n, errors })
+    const result = (expr: AST.Expression, errors: ParseError[] = [], n = 1) =>
+      ({ expr, n, errors })
     const token = tokens[i]
     switch (token.type) {
       case 'Ident':
@@ -421,6 +421,36 @@ export namespace AST {
         delete (token as any).length
         // ^ temporary, for tests, TODO: remove
         return result(token)
+      case 'Group':
+        switch (token.delims) {
+          case '[]':
+            // accumulate exprs & errors by looping over nested token trees
+            const exprs: Expression[] = []
+            const errors: ParseError[] = []
+            let nestedI = 0
+            while (nestedI < token.nested.length) {
+              // parse item
+              const item = parseExpr(token.nested, nestedI)
+              nestedI += item.n
+              errors.push(...item.errors)
+              if (item.expr) exprs.push(item.expr)
+
+              // if no trailing comma, no problem
+              if (nestedI >= token.nested.length) break
+              // other than that, consume comma after each item
+              const next = token.nested[nestedI]
+              if (next.type === 'Punct' && next.val === ',') {
+                nestedI += 1
+              } else {
+                errors.push({ i: next.i, code: 'array_comma',
+                  msg: 'Parsing array, just finished parsing array item, expected comma, got: ' + JSON.stringify(next) })
+                break
+              }
+            }
+            return result({ type: 'ArrayLiteral', exprs }, errors)
+          default:
+            throw `parseExpr() of Group with delims '${token.delims}' not yet implemented`
+        }
       default:
         throw `parseExpr() of token type '${token.type}' not yet implemented`
     }
