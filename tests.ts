@@ -348,6 +348,43 @@ suite('TokenTree parsing', () => {
       cleanup(observed)
       assert.deepStrictEqual(observed, expected)
     })
+    test('dedent cuts short delimited group', () => {
+      const observed = parseAndCheck(
+          '  Let y = [\n'
+        + '    1,\n'
+        + '    2,\n'
+        + '3,\n'
+        + '  ]'
+      )
+      const expected = {
+        tokens: [
+          { type: 'Group', delims: 'indent', nested: [
+            { type: 'Ident', val: 'Let' },
+            { type: 'Ident', val: 'y' },
+            { type: 'Punct', val: '=' },
+            { type: 'UnmatchedDelim', val: '[' },
+            { type: 'Group', delims: 'indent', nested: [
+              { type: 'Numeral', val: '1' },
+              { type: 'Punct', val: ',' },
+              { type: 'Punct', val: '\n' },
+              { type: 'Numeral', val: '2' },
+              { type: 'Punct', val: ',' },
+            ]},
+          ]},
+          { type: 'Numeral', val: '3' },
+          { type: 'Punct', val: ',' },
+          { type: 'Group', delims: 'indent', nested: [
+            { type: 'UnmatchedDelim', val: ']' },
+          ]},
+        ],
+        mismatches: [
+          { open:  { type: 'UnmatchedDelim', val: '[' } },
+          { close: { type: 'UnmatchedDelim', val: ']' } },
+        ],
+      }
+      cleanup(observed)
+      assert.deepStrictEqual(observed, expected)
+    })
     test('unmatched close-delimiter in delimited group', () => {
       const observed = parseAndCheck('Let y = (x + ] + 1)\n')
       const expected = {
