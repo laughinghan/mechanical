@@ -607,7 +607,7 @@ suite('AST parsing', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('newlines [1,2,]', () => {
-        const observed = parser.Expression.tryParse(`[
+        const observed = tryParseExpr(`[
           1,
           2,
         ]`)
@@ -615,12 +615,24 @@ suite('AST parsing', () => {
         assert.deepStrictEqual(observed, expected)
       })
       test('comma-first', () => {
-        const observed = parser.Expression.tryParse(
+        const observed = tryParseExpr(
           `[ 1
            , 2
            , 3
            ]`)
         const expected = ArrayLiteral([ '1', '2', '3' ])
+        assert.deepStrictEqual(observed, expected)
+      })
+      test('weird indentation', () => {
+        const observed = tryParseExpr(`[
+          1,
+          2
+            ,
+           3
+         ,
+          4,
+        ]`)
+        const expected = ArrayLiteral([ '1', '2', '3', '4' ])
         assert.deepStrictEqual(observed, expected)
       })
       test('invalid (holes) [1,,2]', () => {

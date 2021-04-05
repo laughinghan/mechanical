@@ -404,6 +404,23 @@ export namespace AST {
 
   export type TopLevel = StateDecl | WhenDecl | DoStmt | GetDoStmt
 
+  export function stripWhitespace(tokens: TokenTree.Seq): TokenTree.Seq {
+    const stripped = []
+    for (const token of tokens) {
+      if ((token.type === 'Punct' && token.val === '\n')
+          || (token.type === 'UnmatchedDelim' && token.val === 'dedent')) {
+        continue
+      }
+      if (token.type === 'Group' && token.delims === 'indent') {
+        stripped.push(...stripWhitespace(token.nested))
+      }
+      else {
+        stripped.push(token)
+      }
+    }
+    return stripped
+  }
+
   type ParseError = { i: number, length?: number, code: string, msg: string }
   export function parseExpr(tokens: TokenTree.Seq, i: number): {
     expr?: AST.Expression, n: number, errors: ParseError[]
@@ -425,20 +442,21 @@ export namespace AST {
         switch (token.delims) {
           case '[]':
             // accumulate exprs & errors by looping over nested token trees
+            const nested = stripWhitespace(token.nested)
             const exprs: Expression[] = []
             const errors: ParseError[] = []
             let nestedI = 0
-            while (nestedI < token.nested.length) {
+            while (nestedI < nested.length) {
               // parse item
-              const item = parseExpr(token.nested, nestedI)
+              const item = parseExpr(nested, nestedI)
               nestedI += item.n
               errors.push(...item.errors)
               if (item.expr) exprs.push(item.expr)
 
               // if no trailing comma, no problem
-              if (nestedI >= token.nested.length) break
+              if (nestedI >= nested.length) break
               // other than that, consume comma after each item
-              const next = token.nested[nestedI]
+              const next = nested[nestedI]
               if (next.type === 'Punct' && next.val === ',') {
                 nestedI += 1
               } else {
