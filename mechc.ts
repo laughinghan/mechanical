@@ -103,14 +103,14 @@ export namespace TokenTree {
   type AnyToken =
       Token<'Ident'>
     | Token<'Punct'>
-    | Token<'UnmatchedDelim'>
+    | Token<'UnmatchedDelim', 'dedent' | '[' | ']' | '(' | ')' | '{' | '}'>
     | Token<'Numeral'>
     | Token<'StringLiteral'>
     | Token<'FieldFunc'>
     //| Token<'Hashtag'>
-  interface Token<T> extends Span {
+  interface Token<T, Val = string> extends Span {
     readonly type: T
-    readonly val: string
+    readonly val: Val
   }
   interface Group extends Span {
     readonly type: 'Group'
